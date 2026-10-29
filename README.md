@@ -1,56 +1,36 @@
-# Welcome to your Expo app 👋
+# Members – die App zur Mitglieder-Software
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Native App (React Native, Expo SDK 58) für alle Installationen der Mitglieder-Software (`C:/Projekte/mitglieder-software`).
+Beim ersten Start wählt man die Community, danach meldet man sich mit E-Mail und Passwort der Website an.
 
-## Get started
+## Wie die App mit der Software spricht
 
-1. Install dependencies
+- Dieselben Schnittstellen wie der Mitgliederbereich der Website (`/api/member/…`).
+- Anmeldung: `POST /api/auth/login` mit `X-Client: members-app` liefert den Sitzungs-Token (kein Cookie). Die App legt ihn
+  im sicheren Speicher des Handys ab und schickt ihn als `Authorization: Bearer …` – auch bei Bildern und Videos.
+  Gegenstück in der Software: `worker/core/lib/app-client.ts` (ab Commit 4bc2188). **Ältere Installationen kennen das
+  nicht** – erst die Software aktualisieren.
+- Videos: wie auf der Website ein Stream-Token pro Video (`…/play`), Fortschritt alle 15 s, 90-%-Regel für „erledigt“.
+- Kaufen, Preise und Abos gibt es in der App bewusst nicht (Apple-Regeln für In-App-Käufe).
 
-   ```bash
-   npm install
-   ```
+## Entwickeln am PC
 
-2. Start the app
+Drei Server (Konfiguration in `C:/install/.claude/launch.json`):
 
-   ```bash
-   npx expo start
-   ```
+1. `mitglieder-api` – die Software lokal auf Port 8788 (Testdaten aus dem E2E-Lauf in `.wrangler/e2e-state`)
+2. `members-expo` – Expo/Metro auf Port 8081
+3. `members-app` – `scripts/dev-proxy.mjs` auf Port 8090: App und Software unter einer Adresse
 
-In the output, you'll find options to open the app in a
+Dann im Browser `http://localhost:8090` öffnen und als Adresse `http://localhost:8090` eingeben. Videos laufen im Browser
+nicht (er kann den Login nicht mitschicken) – auf dem Handy schon.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Auf dem Handy testen (Expo Go)
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+`npx expo start --tunnel` im Projektordner, dann den QR-Code mit der App „Expo Go“ scannen (iPhone: Kamera-App).
 
-## Get a fresh project
-
-When you're ready, run:
+## Prüfen
 
 ```bash
-npm run reset-project
+npx tsc --noEmit
+npx expo lint
 ```
-
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
