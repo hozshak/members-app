@@ -26,7 +26,7 @@ nicht (er kann den Login nicht mitschicken) – auf dem Handy schon.
 
 ## Auf dem Handy testen (Expo Go)
 
-`npx expo start --tunnel` im Projektordner, dann den QR-Code mit der App „Expo Go“ scannen (iPhone: Kamera-App).
+`npx expo start --tunnel ngrok` im Projektordner (ohne Expo-Konto), dann den QR-Code mit der App „Expo Go“ scannen (iPhone: Kamera-App).
 
 ## Prüfen
 
