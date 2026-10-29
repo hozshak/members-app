@@ -51,7 +51,28 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Für deine Fortschrittsfotos braucht die App die Frontkamera. Die Fotos bleiben nur auf deinem Handy.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Damit du ein Profilfoto aus deinen Fotos auswählen kannst.",
+          "cameraPermission": "Für deine Fortschrittsfotos braucht die App die Frontkamera."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#C2410C"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

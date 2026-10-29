@@ -3,13 +3,22 @@
 // session has been checked.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { SessionProvider, useSession } from '@/lib/session';
 import { usePalette } from '@/lib/theme';
 
 void SplashScreen.preventAutoHideAsync();
+
+// the routine reminder (a local notification) also shows while the app is open
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+  });
+}
 
 function RootStack() {
   const { ready, community, token } = useSession();

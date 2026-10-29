@@ -11,12 +11,12 @@ import { radius, space, type, usePalette } from '@/lib/theme';
 
 type Variant = keyof typeof type;
 
-export function Txt({ variant = 'body', muted, color, style, children, numberOfLines }: {
-  variant?: Variant; muted?: boolean; color?: string; style?: StyleProp<TextStyle>; children: ReactNode; numberOfLines?: number;
+export function Txt({ variant = 'body', muted, color, style, children, numberOfLines, accessibilityLabel }: {
+  variant?: Variant; muted?: boolean; color?: string; style?: StyleProp<TextStyle>; children: ReactNode; numberOfLines?: number; accessibilityLabel?: string;
 }) {
   const p = usePalette();
   return (
-    <Text numberOfLines={numberOfLines} style={[type[variant], { color: color ?? (muted ? p.textMuted : p.text) }, variant === 'caption' && { textTransform: 'uppercase' }, style]}>
+    <Text numberOfLines={numberOfLines} accessibilityLabel={accessibilityLabel} style={[type[variant], { color: color ?? (muted ? p.textMuted : p.text) }, variant === 'caption' && { textTransform: 'uppercase' }, style]}>
       {children}
     </Text>
   );
