@@ -1,18 +1,52 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+// Root of the app: data cache, session, and the three stages as protected stacks — choose a community, log in, the
+// member area (tabs). Expo Router shows the first stage whose guard is true; the splash screen stays until the stored
+// session has been checked.
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { SessionProvider, useSession } from '@/lib/session';
+import { usePalette } from '@/lib/theme';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+void SplashScreen.preventAutoHideAsync();
 
-SplashScreen.preventAutoHideAsync();
+function RootStack() {
+  const { ready, community, token } = useSession();
+  const p = usePalette();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    if (ready) void SplashScreen.hideAsync();
+  }, [ready]);
+  if (!ready) return null;
+
+  const base = p.scheme === 'dark' ? DarkTheme : DefaultTheme;
+  const theme = { ...base, colors: { ...base.colors, primary: p.accent, background: p.bg, card: p.surface, text: p.text, border: p.line } };
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <ThemeProvider value={theme}>
+      <StatusBar style={p.scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}>
+        <Stack.Protected guard={!community}>
+          <Stack.Screen name="community" />
+        </Stack.Protected>
+        <Stack.Protected guard={!!community && !token}>
+          <Stack.Screen name="login" />
+        </Stack.Protected>
+        <Stack.Protected guard={!!community && !!token}>
+          <Stack.Screen name="(tabs)" />
+        </Stack.Protected>
+      </Stack>
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } }));
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider>
+        <RootStack />
+      </SessionProvider>
+    </QueryClientProvider>
   );
 }
