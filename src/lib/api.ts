@@ -4,7 +4,7 @@
 import type { ApiErrorBody } from './types';
 
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message?: string) {
+  constructor(readonly status: number, readonly code: string, message?: string, readonly fields: Record<string, string> = {}) {
     super(message ?? code);
   }
 }
@@ -14,6 +14,10 @@ export interface ApiClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
   put<T>(path: string, body?: unknown): Promise<T>;
+  patch<T>(path: string, body: unknown): Promise<T>;
+  del<T>(path: string): Promise<T>;
+  /** PUT of a file (profile photo): the bytes of a local file as `contentType`. */
+  putFile<T>(path: string, fileUri: string, contentType: string): Promise<T>;
   /** Absolute address of a path the API returned (`/media/…`); full URLs stay. */
   url(path: string): string;
   /** Headers for images and videos of this community (they need the session too). */
@@ -44,12 +48,14 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     return h;
   };
 
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: string, path: string, body?: unknown, file?: { blob: Blob; type: string }): Promise<T> {
     let res: Response;
     try {
+      const h = headers(body !== undefined);
+      if (file) h['Content-Type'] = file.type;
       res = await fetch(baseUrl + path, {
-        method, headers: headers(body !== undefined), credentials: 'omit',
-        body: body === undefined ? undefined : JSON.stringify(body),
+        method, headers: h, credentials: 'omit',
+        body: file ? file.blob : body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
       throw new ApiError(0, 'network', 'Keine Verbindung. Prüfe dein Internet und versuch es noch einmal.');
@@ -60,8 +66,9 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     try { data = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
     if (!res.ok) {
       const err = (data as ApiErrorBody | null)?.error;
-      if (res.status === 401 && getToken()) onUnauthorized();
-      throw new ApiError(res.status, err?.code ?? `http_${res.status}`, err?.message);
+      // 401 = the session is gone — except a wrong password typed into a form (change password, sudo)
+      if (res.status === 401 && getToken() && err?.code !== 'invalid_credentials') onUnauthorized();
+      throw new ApiError(res.status, err?.code ?? `http_${res.status}`, err?.message, err?.fields ?? {});
     }
     return data as T;
   }
@@ -71,6 +78,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     get: (path) => request('GET', path),
     post: (path, body) => request('POST', path, body ?? {}),
     put: (path, body) => request('PUT', path, body ?? {}),
+    patch: (path, body) => request('PATCH', path, body),
+    del: (path) => request('DELETE', path),
+    putFile: async (path, fileUri, contentType) => {
+      const blob = await (await fetch(fileUri)).blob();
+      return request('PUT', path, undefined, { blob, type: contentType });
+    },
     url: (path) => (/^https?:\/\//i.test(path) ? path : baseUrl + path),
     mediaHeaders: () => {
       const token = getToken();
@@ -86,7 +99,7 @@ export function errorText(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case 'network': return err.message;
-      case 'invalid_credentials': return 'E-Mail oder Passwort stimmen nicht.';
+      case 'invalid_credentials': return 'Das Passwort stimmt nicht.';
       case 'throttled': return 'Zu viele Versuche. Warte kurz und versuch es dann noch einmal.';
       case 'password_change_required': return 'Bitte ändere zuerst dein Passwort auf der Website, dann kannst du dich hier anmelden.';
       case 'not_found': return 'Das gibt es hier nicht (mehr).';

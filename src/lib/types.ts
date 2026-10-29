@@ -13,10 +13,25 @@ export interface Bootstrap {
 export interface Me {
   id: Id; email: string; username: string | null; firstName: string; lastName: string; displayName: string;
   role: 'owner' | 'admin' | 'editor' | 'support' | 'member'; memberNo: number; avatarUrl: string | null;
-  restricted: boolean; mustChangePassword: boolean;
+  restricted: boolean; mustChangePassword: boolean; passwordMinLength: number; linkedAccount?: boolean;
 }
 /** POST /api/auth/login with `X-Client: members-app`. */
 export interface LoginResponse { me: Me; token?: string }
+
+export interface Address { company: string; street: string; zip: string; city: string; country: string; vatId: string }
+export interface NotifyPrefs { mail: boolean; push: boolean }
+/** GET /api/profile. */
+export interface Profile {
+  id: Id; email: string; username: string | null; firstName: string; lastName: string; displayName: string; avatarUrl: string | null;
+  memberNo: number; createdAt: UnixSec; address: Address; notifyUnlock: NotifyPrefs; notifyReply: NotifyPrefs;
+}
+export interface SessionInfo { id: string; uaLabel: string; ipPrefix: string; createdAt: UnixSec; lastSeenAt: UnixSec; current: boolean }
+/** GET /api/member/purchases (subset — the app shows what was bought, no prices). */
+export interface Purchase {
+  orderId: Id; number: string; productTitle: string; productSlug: string; status: string; createdAt: UnixSec; paidAt: UnixSec | null;
+  accessUntil: UnixSec | null; accessLocked: boolean; isTest: boolean;
+}
+export interface ChangePasswordResponse { me: Me; token?: string }
 
 export type LessonKind = 'video' | 'text' | 'video_text' | 'pdf';
 
@@ -69,5 +84,14 @@ export interface ProgressUpdate { positionSec: number; durationSec: number; comp
 export interface LessonDoneResult { done: boolean; doneCount: number; lessonCount: number; unlocked: { id: Id; slug: string; title: string }[] }
 export interface DownloadLink { url: string; expiresAt: UnixSec }
 
+export interface LikeState { liked: boolean; likeCount: number }
+export interface CommentAuthor { id: Id; displayName: string; avatarUrl: string | null; isTeam: boolean }
+export interface Comment {
+  id: Id; videoId: Id; parentId: Id | null; author: CommentAuthor; body: string; status: 'visible' | 'pending' | 'hidden' | 'deleted';
+  pinned: boolean; createdAt: UnixSec; editedAt: UnixSec | null; likeCount: number; likedByMe: boolean; replyCount: number; replies: Comment[];
+  canEdit: boolean; canDelete: boolean; canReport: boolean; canModerate: boolean;
+}
+export interface CommentsPage { items: Comment[]; nextCursor: string | null; total: number }
+
 /** Error body of every API error: `{ error: { code, message?, fields?, details? } }`. */
-export interface ApiErrorBody { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
+export interface ApiErrorBody { error?: { code?: string; message?: string; fields?: Record<string, string>; details?: Record<string, unknown> } }

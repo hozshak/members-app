@@ -1,8 +1,9 @@
 // The building blocks of every screen: text in the type scale, buttons, cards, cover images (with the session, the
 // community's media need it), a progress bar, loading and error states. Colours come from usePalette().
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Children, type ComponentProps, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorText } from '@/lib/api';
 import { useSession } from '@/lib/session';
@@ -155,3 +156,72 @@ const styles = StyleSheet.create({
   card: { borderRadius: radius.l, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });
+
+/** A labelled text field (forms of the profile). */
+export function Field({ label, value, onChangeText, help, error, ...input }: {
+  label: string; value: string; onChangeText: (v: string) => void; help?: string; error?: string | null;
+} & Omit<ComponentProps<typeof TextInput>, 'value' | 'onChangeText' | 'style'>) {
+  const p = usePalette();
+  return (
+    <View style={{ gap: space.xs }}>
+      <Txt variant="small" muted>{label}</Txt>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        accessibilityLabel={label}
+        placeholderTextColor={p.textMuted}
+        style={{ minHeight: 50, borderRadius: radius.l, borderWidth: 1, borderColor: error ? p.danger : p.line, backgroundColor: p.surface, color: p.text, paddingHorizontal: space.l, fontSize: 16 }}
+        {...input}
+      />
+      {error ? <Txt variant="small" color={p.danger}>{error}</Txt> : help ? <Txt variant="small" muted>{help}</Txt> : null}
+    </View>
+  );
+}
+
+/** A row of a settings list: icon, label, optional value, chevron. */
+export function MenuRow({ icon, label, value, onPress, external }: {
+  icon: keyof typeof Ionicons.glyphMap; label: string; value?: string; onPress: () => void; external?: boolean;
+}) {
+  const p = usePalette();
+  return (
+    <Pressable
+      accessibilityRole={external ? 'link' : 'button'}
+      onPress={onPress}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.m, paddingVertical: space.m, paddingHorizontal: space.l, minHeight: 52, backgroundColor: pressed ? p.surfaceAlt : p.surface })}
+    >
+      <Ionicons name={icon} size={22} color={p.accent} />
+      <Txt variant="heading" style={{ flex: 1 }}>{label}</Txt>
+      {value ? <Txt variant="small" muted>{value}</Txt> : null}
+      <Ionicons name={external ? 'open-outline' : 'chevron-forward'} size={18} color={p.textMuted} />
+    </Pressable>
+  );
+}
+
+/** A group of rows on one card, separated by hairlines. */
+export function MenuGroup({ children }: { children: ReactNode }) {
+  const p = usePalette();
+  const rows = Children.toArray(children).filter(Boolean);
+  return (
+    <View style={[styles.card, { backgroundColor: p.surface, borderColor: p.line }]}>
+      {rows.map((row, i) => (
+        <View key={i} style={i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.line } : undefined}>{row}</View>
+      ))}
+    </View>
+  );
+}
+
+/** A switch with a label and an explanation. */
+export function ToggleRow({ label, help, value, onValueChange, disabled }: {
+  label: string; help?: string; value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean;
+}) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, paddingVertical: space.m, paddingHorizontal: space.l, backgroundColor: p.surface }}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt variant="heading">{label}</Txt>
+        {help ? <Txt variant="small" muted>{help}</Txt> : null}
+      </View>
+      <Switch value={value} onValueChange={onValueChange} disabled={disabled} trackColor={{ true: p.accent, false: p.surfaceAlt }} accessibilityLabel={label} />
+    </View>
+  );
+}

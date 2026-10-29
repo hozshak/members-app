@@ -25,6 +25,10 @@ interface SessionState {
   forgetCommunity(): Promise<void>;
   login(login: string, password: string): Promise<void>;
   logout(): Promise<void>;
+  /** After a password change the software issues a new session token (the old one ends). */
+  replaceToken(token: string): Promise<void>;
+  /** Reload the member (name, photo) after a profile change. */
+  refreshMe(): Promise<void>;
 }
 
 const COMMUNITY_KEY = 'members.community';
@@ -138,9 +142,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMe(res.me);
   }, [api, tokens]);
 
+  const replaceToken = useCallback(async (next: string) => {
+    await setItem(TOKEN_KEY, next);
+    tokens.set(next);
+    setToken(next);
+  }, [tokens]);
+
+  const refreshMe = useCallback(async () => {
+    if (!api) return;
+    try { setMe(await api.get<Me>('/api/auth/me')); } catch { /* the screens show their own errors */ }
+  }, [api]);
+
   const value = useMemo<SessionState>(
-    () => ({ ready, community, token, me, api, chooseCommunity, forgetCommunity, login, logout }),
-    [ready, community, token, me, api, chooseCommunity, forgetCommunity, login, logout],
+    () => ({ ready, community, token, me, api, chooseCommunity, forgetCommunity, login, logout, replaceToken, refreshMe }),
+    [ready, community, token, me, api, chooseCommunity, forgetCommunity, login, logout, replaceToken, refreshMe],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

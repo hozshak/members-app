@@ -2,12 +2,15 @@
 // of the software). Marking a lesson as done refreshes everything that shows progress.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApi } from './session';
-import type { LessonDoneResult, MemberCategoryDetail, MemberHome, MemberProductDetail, PlayResponse, ProgressUpdate, VideoDetail } from './types';
+import type {
+  LessonDoneResult, MemberCategoryDetail, MemberHome, MemberLibrary, MemberProductDetail, PlayResponse, Profile, ProgressUpdate, Purchase, SessionInfo, VideoDetail,
+} from './types';
 
 const enc = encodeURIComponent;
 
 export const keys = {
   home: ['home'] as const,
+  library: ['library'] as const,
   product: (slug: string) => ['product', slug] as const,
   category: (slug: string) => ['category', slug] as const,
   video: (id: string) => ['video', id] as const,
@@ -16,6 +19,11 @@ export const keys = {
 export function useHome() {
   const api = useApi();
   return useQuery({ queryKey: keys.home, queryFn: () => api.get<MemberHome>('/api/member/home') });
+}
+
+export function useLibrary() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.library, queryFn: () => api.get<MemberLibrary>('/api/member/library') });
 }
 
 export function useProduct(slug: string) {
@@ -54,6 +62,24 @@ export function useMarkDone(videoId: string) {
       void qc.invalidateQueries({ queryKey: ['category'] });
       void qc.invalidateQueries({ queryKey: ['product'] });
       void qc.invalidateQueries({ queryKey: keys.home });
+      void qc.invalidateQueries({ queryKey: keys.library });
     },
   });
+}
+
+// ---------- profile ----------
+
+export function useProfile() {
+  const api = useApi();
+  return useQuery({ queryKey: ['profile'] as const, queryFn: () => api.get<Profile>('/api/profile') });
+}
+
+export function useSessions() {
+  const api = useApi();
+  return useQuery({ queryKey: ['sessions'] as const, queryFn: async () => (await api.get<{ items: SessionInfo[] }>('/api/profile/sessions')).items });
+}
+
+export function usePurchases() {
+  const api = useApi();
+  return useQuery({ queryKey: ['purchases'] as const, queryFn: async () => (await api.get<{ items: Purchase[] }>('/api/member/purchases')).items });
 }
