@@ -38,7 +38,13 @@ export function useShareCard(content: ShareContent | null) {
   };
 
   const element = content ? (
-    <View pointerEvents="none" style={{ position: 'absolute', left: -W * 3, top: 0 }}>
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      aria-hidden
+      style={{ position: 'absolute', left: -W * 3, top: 0 }}
+    >
       <View ref={ref} collapsable={false} style={{ width: W, height: W * 1.25, backgroundColor: accent, padding: 32, justifyContent: 'space-between', overflow: 'hidden' }}>
         <Ionicons name="flame" size={300} color={fg} style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.12 }} />
         <Text style={{ color: fg, fontSize: 14, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' }}>{community?.name ?? ''}</Text>

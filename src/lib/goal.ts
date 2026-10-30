@@ -60,7 +60,8 @@ export function goalProgress(goal: Goal, stats: RoutineStats, today = localDay()
   else if (done === 0) message = 'Los geht’s – jeder Tag bringt dich deinem Ziel näher.';
   else if (remaining <= 3) message = `Fast geschafft – nur noch ${remaining} ${remaining === 1 ? 'Tag' : 'Tage'}!`;
   else if (forecast && forecast <= endDay) message = `Bleib dran: So erreichst du dein Ziel am ${fmt(forecast)}.`;
-  else message = `Mit ${goal.perWeek}× pro Woche schaffst du es bis zum ${fmt(endDay)} – heute ist ein guter Tag.`;
+  else if (stats.doneToday) message = `Stark, heute erledigt! Noch ${remaining} Tage bis zu deinem Ziel.`;
+  else message = `Mit ${goal.perWeek}× pro Woche schaffst du es bis zum ${fmt(endDay)} – mach heute weiter.`;
 
   return {
     target, done, share: Math.min(1, done / target), endDay, dayOfGoal: elapsed,
