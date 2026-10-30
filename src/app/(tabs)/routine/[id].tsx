@@ -18,6 +18,7 @@ import { LessonPlayer } from '@/components/player';
 import { useShareCard } from '@/components/share-card';
 import { Button, ErrorView, Loading, Screen, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
+import { useDayChecks } from '@/lib/goal';
 import { clock } from '@/lib/format';
 import {
   cancelTodaysRescue, newBadges, scaledDuration, useCheckIn, useRoutinePrefs, useRoutines, type Badge, type MemberRoutine, type RoutineStats,
@@ -77,6 +78,7 @@ function Session({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const checkIn = useCheckIn(routine.id);
+  const checks = useDayChecks(routine.id);
   const [prefs, update] = useRoutinePrefs();
   const [camPerm, requestCam] = useCameraPermissions();
   // the durations of this run (length chosen before the start; changing it later does not disturb the run)
@@ -103,6 +105,9 @@ function Session({ routine }: { routine: MemberRoutine }) {
   const goTo = (next: number) => {
     const s = routine.steps[next];
     if (!s) return;
+    // moving on ticks the exercise just finished (the checklist of the overview)
+    const current = routine.steps[index];
+    if (next > index && current) checks.mark(current.id);
     setIndex(next);
     setRemaining(durations[next] ?? s.durationSec);
     endsAt.current = Date.now() + (durations[next] ?? s.durationSec) * 1000;
@@ -120,6 +125,8 @@ function Session({ routine }: { routine: MemberRoutine }) {
   });
 
   const finish = () => {
+    const last = routine.steps[routine.steps.length - 1];
+    if (last) checks.mark(last.id);
     setRunning(false);
     buzz('done');
     say('Geschafft! Gut gemacht.', prefs.voice);
