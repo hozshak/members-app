@@ -2,11 +2,13 @@
 // (ProtectedPlayer.tsx of the software): a stream token from POST …/play (address + resume position + watermark), the
 // session as Bearer header on the stream, a new token after `renewAfterSec` while playing, progress every 15 s, on pause
 // and at the end (completed). It pauses when the app goes to the background. The watermark moves over the picture; with
-// a watermark the native fullscreen is off (it would hide the watermark).
+// a watermark the native fullscreen is off (it would hide the watermark). The frame takes the shape of the video as soon
+// as it is loaded: a portrait (phone) video stands upright — at most 70 % of the screen height, centred — instead of a
+// small picture between black bars.
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { errorText } from '@/lib/api';
 import { useApi } from '@/lib/session';
 import { radius, space } from '@/lib/theme';
@@ -20,7 +22,7 @@ export interface LessonPlayerProps {
   playPath: string;
   /** PUT path for progress; none for embedded videos (they never count as watched). */
   progressPath?: string;
-  /** 16:9 unless the video says otherwise. */
+  /** Shape before the video is loaded (16:9); afterwards the video's own. */
   aspect?: number;
   onCompleted?: () => void;
 }
@@ -41,6 +43,17 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   const completedSent = useRef(false);
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
   const { status } = useEvent(player, 'statusChange', { status: player.status });
+  // the real shape of the video (width / height), known once its track is loaded
+  const [videoAspect, setVideoAspect] = useState<number | null>(null);
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  useEventListener(player, 'sourceLoad', ({ availableVideoTracks }) => {
+    const size = availableVideoTracks[0]?.size;
+    if (size && size.width > 0 && size.height > 0) setVideoAspect(size.width / size.height);
+  });
+  useEventListener(player, 'videoTrackChange', ({ videoTrack }) => {
+    const size = videoTrack?.size;
+    if (size && size.width > 0 && size.height > 0) setVideoAspect(size.width / size.height);
+  });
 
   const attach = useCallback(async (resp: PlayResponse, at: number, autoplay: boolean) => {
     await player.replaceAsync({ uri: api.url(resp.src), headers: api.mediaHeaders() });
@@ -123,7 +136,7 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
 
   const wm = play?.watermark;
   return (
-    <View style={[styles.frame, { aspectRatio: aspect, borderRadius: radius.l }]}>
+    <View style={[styles.frame, frameStyle(videoAspect ?? aspect, screenW, screenH), { borderRadius: radius.l }]}>
       <VideoView
         player={player}
         style={StyleSheet.absoluteFill}
@@ -148,6 +161,14 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   );
 }
 
+/** Landscape: full width. Portrait: upright, at most 70 % of the screen high and never wider than the page, centred. */
+function frameStyle(aspect: number, screenW: number, screenH: number) {
+  if (aspect >= 1) return { width: '100%' as const, aspectRatio: aspect };
+  const pageW = screenW - 2 * space.l;
+  const height = Math.round(Math.min(screenH * 0.7, pageW / aspect));
+  return { height, width: Math.round(height * aspect), alignSelf: 'center' as const };
+}
+
 /** The member's name/e-mail, moved to another corner every `intervalSec` (like on the website). */
 function Watermark({ text, opacity, intervalSec }: { text: string; opacity: number; intervalSec: number }) {
   const [pos, setPos] = useState({ top: '12%', left: '8%' });
@@ -167,6 +188,6 @@ function Watermark({ text, opacity, intervalSec }: { text: string; opacity: numb
 }
 
 const styles = StyleSheet.create({
-  frame: { width: '100%', backgroundColor: '#000000', overflow: 'hidden' },
+  frame: { maxWidth: '100%', backgroundColor: '#000000', overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });

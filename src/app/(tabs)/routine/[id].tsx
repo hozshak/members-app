@@ -9,7 +9,6 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +23,7 @@ import {
   cancelTodaysRescue, newBadges, scaledDuration, useCheckIn, useRoutinePrefs, useRoutines, type Badge, type MemberRoutine, type RoutineStats,
 } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
+import { prepareVoice, say, spokenDuration, stopVoice } from '@/lib/voice';
 
 const STROKE = 12;
 
@@ -32,20 +32,6 @@ function buzz(kind: 'step' | 'done') {
   void (kind === 'done'
     ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
-}
-
-/** 90 → "1 Minute 30", 45 → "45 Sekunden" (spoken). */
-function spokenDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  if (m === 0) return `${s} Sekunden`;
-  return `${m} ${m === 1 ? 'Minute' : 'Minuten'}${s ? ` ${s}` : ''}`;
-}
-
-function say(text: string, on: boolean) {
-  if (!on || Platform.OS === 'web') return;
-  Speech.stop();
-  Speech.speak(text, { language: 'de-DE', rate: 1.0 });
 }
 
 export default function RoutineSessionScreen() {
@@ -99,7 +85,9 @@ function Session({ routine }: { routine: MemberRoutine }) {
 
   const announce = (i: number) => {
     const s = routine.steps[i];
-    if (s) say(`Übung ${i + 1}: ${s.title}. ${spokenDuration(durations[i] ?? s.durationSec)}.`, prefs.voice);
+    if (!s) return;
+    const lead = i === 0 ? 'Los geht’s. Erste Übung:' : i === routine.steps.length - 1 ? 'Und zum Schluss:' : 'Als Nächstes:';
+    say(`${lead} ${s.title}. ${spokenDuration(durations[i] ?? s.durationSec)}.`, prefs.voice);
   };
 
   const goTo = (next: number) => {
@@ -129,14 +117,15 @@ function Session({ routine }: { routine: MemberRoutine }) {
     if (last) checks.mark(last.id);
     setRunning(false);
     buzz('done');
-    say('Geschafft! Gut gemacht.', prefs.voice);
+    say('Geschafft. Schön gemacht.', prefs.voice);
     save();
   };
 
   // first exercise announced once; speech stops when leaving
   useEffect(() => {
+    prepareVoice();
     announce(0);
-    return () => { if (Platform.OS !== 'web') Speech.stop(); };
+    return () => stopVoice();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only at the start of the run
   }, []);
 
@@ -149,7 +138,7 @@ function Session({ routine }: { routine: MemberRoutine }) {
       setRemaining(left);
       if (left === 10 && (durations[index] ?? 0) >= 25 && spokeTen.current !== index) {
         spokeTen.current = index;
-        say('Noch 10 Sekunden', prefs.voice);
+        say('Noch zehn Sekunden.', prefs.voice);
       }
       if (left === 0) {
         clearInterval(t);
@@ -162,7 +151,7 @@ function Session({ routine }: { routine: MemberRoutine }) {
   }, [running, index, finished]);
 
   const togglePause = () => {
-    if (running && Platform.OS !== 'web') Speech.stop();
+    if (running) stopVoice();
     setRunning((v) => !v);
   };
 
@@ -238,7 +227,7 @@ function Session({ routine }: { routine: MemberRoutine }) {
 
       <View style={{ flexDirection: 'row', gap: space.s }}>
         <OptionChip icon={prefs.mirror ? 'scan' : 'scan-outline'} label="Spiegel" on={prefs.mirror} onPress={() => void toggleMirror()} />
-        <OptionChip icon={prefs.voice ? 'volume-high' : 'volume-mute'} label="Ansage" on={prefs.voice} onPress={() => { if (prefs.voice && Platform.OS !== 'web') Speech.stop(); update({ voice: !prefs.voice }); }} />
+        <OptionChip icon={prefs.voice ? 'volume-high' : 'volume-mute'} label="Ansage" on={prefs.voice} onPress={() => { if (prefs.voice) stopVoice(); update({ voice: !prefs.voice }); }} />
       </View>
 
       <View style={{ gap: space.xs }}>
