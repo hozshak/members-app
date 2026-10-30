@@ -5,6 +5,8 @@
 // a watermark the native fullscreen is off (it would hide the watermark). The frame takes the shape of the video as soon
 // as it is loaded: a portrait (phone) video stands upright — at most 70 % of the screen height, centred — instead of a
 // small picture between black bars.
+// Variant "coach" (routine, next to the mirror): fills the frame of its parent, no controls, starts at 0 and loops, and
+// plays exactly while `playing` is true (the countdown of the exercise); the parent learns the video's shape (onAspect).
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,6 +27,12 @@ export interface LessonPlayerProps {
   /** Shape before the video is loaded (16:9); afterwards the video's own. */
   aspect?: number;
   onCompleted?: () => void;
+  /** 'coach': fills the parent, no controls, loops from the start, follows `playing`. */
+  variant?: 'lesson' | 'coach';
+  /** coach: plays while true, pauses while false. */
+  playing?: boolean;
+  /** The real shape (width / height) once the video is loaded. */
+  onAspect?: (aspect: number) => void;
 }
 
 /** Jumps to a position. expo-video's player is an imperative native object: seeking is assigning `currentTime`. */
@@ -32,9 +40,12 @@ function seek(player: VideoPlayer, at: number): void {
   player.currentTime = at;
 }
 
-export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onCompleted }: LessonPlayerProps) {
+export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onCompleted, variant = 'lesson', playing, onAspect }: LessonPlayerProps) {
   const api = useApi();
-  const player = useVideoPlayer(null);
+  const coach = variant === 'coach';
+  const player = useVideoPlayer(null, (p) => { p.loop = coach; });
+  // the source is attached (coach: only then `playing` can start it)
+  const [loaded, setLoaded] = useState(false);
   const [play, setPlay] = useState<PlayResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
@@ -46,14 +57,13 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   // the real shape of the video (width / height), known once its track is loaded
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
   const { width: screenW, height: screenH } = useWindowDimensions();
-  useEventListener(player, 'sourceLoad', ({ availableVideoTracks }) => {
-    const size = availableVideoTracks[0]?.size;
-    if (size && size.width > 0 && size.height > 0) setVideoAspect(size.width / size.height);
-  });
-  useEventListener(player, 'videoTrackChange', ({ videoTrack }) => {
-    const size = videoTrack?.size;
-    if (size && size.width > 0 && size.height > 0) setVideoAspect(size.width / size.height);
-  });
+  const takeSize = (size: { width: number; height: number } | undefined) => {
+    if (!size || size.width <= 0 || size.height <= 0) return;
+    setVideoAspect(size.width / size.height);
+    onAspect?.(size.width / size.height);
+  };
+  useEventListener(player, 'sourceLoad', ({ availableVideoTracks }) => takeSize(availableVideoTracks[0]?.size));
+  useEventListener(player, 'videoTrackChange', ({ videoTrack }) => takeSize(videoTrack?.size));
 
   const attach = useCallback(async (resp: PlayResponse, at: number, autoplay: boolean) => {
     await player.replaceAsync({ uri: api.url(resp.src), headers: api.mediaHeaders() });
@@ -70,13 +80,22 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
         const resp = await api.post<PlayResponse>(playPath);
         if (!alive.current) return;
         setPlay(resp);
-        await attach(resp, resp.resumeAtSec, false);
+        // coach: the exercise always from the start (not where the lesson was left)
+        await attach(resp, coach ? 0 : resp.resumeAtSec, false);
+        if (alive.current) setLoaded(true);
       } catch (err) {
         if (alive.current) setError(err);
       }
     })();
     return () => { alive.current = false; };
-  }, [api, playPath, attach, attempt]);
+  }, [api, playPath, attach, attempt, coach]);
+
+  // coach: plays exactly while the exercise runs
+  useEffect(() => {
+    if (!coach || !loaded) return;
+    if (playing) player.play();
+    else player.pause();
+  }, [coach, loaded, playing, player]);
 
   // a new token after renewAfterSec while playing (the old one would expire mid-video)
   useEffect(() => {
@@ -136,11 +155,11 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
 
   const wm = play?.watermark;
   return (
-    <View style={[styles.frame, frameStyle(videoAspect ?? aspect, screenW, screenH), { borderRadius: radius.l }]}>
+    <View style={coach ? [StyleSheet.absoluteFill, { backgroundColor: '#000000' }] : [styles.frame, frameStyle(videoAspect ?? aspect, screenW, screenH), { borderRadius: radius.l }]}>
       <VideoView
         player={player}
         style={StyleSheet.absoluteFill}
-        nativeControls
+        nativeControls={!coach}
         contentFit="contain"
         fullscreenOptions={{ enable: !wm?.enabled }}
         allowsPictureInPicture={false}
@@ -152,9 +171,9 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
         </View>
       ) : null}
       {error || status === 'error' ? (
-        <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: 'rgba(0,0,0,0.75)', padding: space.l, gap: space.m }]}>
-          <Txt color="#FFFFFF" style={{ textAlign: 'center' }}>{error ? errorText(error) : 'Das Video konnte nicht geladen werden.'}</Txt>
-          <Button label="Noch einmal" kind="secondary" onPress={() => { setPlay(null); setError(null); setAttempt((a) => a + 1); }} />
+        <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: 'rgba(0,0,0,0.75)', padding: coach ? space.s : space.l, gap: space.m }]}>
+          <Txt color="#FFFFFF" variant={coach ? 'small' : 'body'} style={{ textAlign: 'center' }}>{error ? errorText(error) : 'Das Video konnte nicht geladen werden.'}</Txt>
+          <Button label="Noch einmal" kind="secondary" onPress={() => { setPlay(null); setLoaded(false); setError(null); setAttempt((a) => a + 1); }} />
         </View>
       ) : null}
     </View>

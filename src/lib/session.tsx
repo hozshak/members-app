@@ -21,7 +21,8 @@ interface SessionState {
   token: string | null;
   me: Me | null;
   api: ApiClient | null;
-  chooseCommunity(input: string): Promise<void>;
+  /** `name`: shown instead of the community's own app name (the communities of the start screen). */
+  chooseCommunity(input: string, name?: string): Promise<void>;
   forgetCommunity(): Promise<void>;
   login(login: string, password: string): Promise<void>;
   logout(): Promise<void>;
@@ -95,7 +96,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; };
   }, [tokens]);
 
-  const chooseCommunity = useCallback(async (input: string) => {
+  const chooseCommunity = useCallback(async (input: string, name?: string) => {
     const url = normalizeBaseUrl(input);
     if (!url) throw new ApiError(0, 'bad_address', 'Diese Adresse sieht nicht richtig aus.');
     let b: Bootstrap;
@@ -107,7 +108,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     if (!b || typeof b.appName !== 'string') throw new ApiError(0, 'not_a_community', 'Unter dieser Adresse gibt es keinen Mitgliederbereich.');
     const c: Community = {
-      url, name: b.appName, accentColor: /^#[0-9a-f]{6}$/i.test(b.accentColor) ? b.accentColor : '#C2410C',
+      url, name: name ?? b.appName, accentColor: /^#[0-9a-f]{6}$/i.test(b.accentColor) ? b.accentColor : '#C2410C',
       logoUrl: b.logoUrl ? (/^https?:/i.test(b.logoUrl) ? b.logoUrl : url + b.logoUrl) : null,
       salutation: b.salutation === 'sie' ? 'sie' : 'du',
     };
@@ -130,7 +131,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (loginName: string, password: string) => {
     if (!api) throw new ApiError(0, 'no_community');
-    const res = await api.post<LoginResponse>('/api/auth/login', { login: loginName.trim(), password });
+    const res = await api.post<LoginResponse>('/api/auth/login', { login: loginName.trim(), password, remember: true });
     if (!res.token) throw new ApiError(0, 'old_server', 'Dieser Mitgliederbereich unterstützt die App noch nicht.');
     if (res.me.restricted || res.me.mustChangePassword) {
       try { await createApi(api.baseUrl, () => res.token ?? null, () => undefined).post('/api/auth/logout'); } catch { /* ignore */ }

@@ -1,16 +1,17 @@
 // Doing the routine: one exercise after the other with a countdown, pause / skip / back, a soft vibration at every
-// change, the screen stays on. Options of the member (kept on the phone): the front camera as a MIRROR (the countdown
-// sits on the picture — face yoga is easier when you see your face), VOICE guidance ("Übung 2: Wangen lockern",
-// "Noch 10 Sekunden") and the LENGTH chosen on the overview (durations scaled). An exercise linked to a course video
-// can be watched right there. After the last one the day is marked done, the streak and new badges are shown, and the
-// success can be shared as a picture.
+// change, the screen stays on. Options of the member (kept on the phone): the front camera as a MIRROR, the exercise
+// VIDEO, VOICE guidance ("Als Nächstes: Wangen lockern", "Noch zehn Sekunden") and the LENGTH chosen on the overview
+// (durations scaled). With mirror and video on (owner 30.10.2026: "das Video neben meinen Spiegel, damit ich beide
+// sehe") both stand side by side in the same size — a portrait video left, the mirror right; a landscape video above
+// the mirror — and the countdown sits on the seam. The video loops from the start and pauses with the countdown.
+// After the last exercise the day is marked done, the streak and new badges are shown, and the success can be shared.
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { LessonPlayer } from '@/components/player';
@@ -23,9 +24,11 @@ import {
   cancelTodaysRescue, newBadges, scaledDuration, useCheckIn, useRoutinePrefs, useRoutines, type Badge, type MemberRoutine, type RoutineStats,
 } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
-import { prepareVoice, say, spokenDuration, stopVoice } from '@/lib/voice';
+import { say, spokenDuration, stopVoice } from '@/lib/voice';
 
 const STROKE = 12;
+/** Shape of an exercise video until it is loaded (most are filmed upright on a phone). */
+const PORTRAIT = 9 / 16;
 
 function buzz(kind: 'step' | 'done') {
   if (Platform.OS === 'web') return;
@@ -45,15 +48,15 @@ export default function RoutineSessionScreen() {
   return <Session routine={routine} />;
 }
 
-function Ring({ size, share }: { size: number; share: number }) {
+function Ring({ size, share, stroke = STROKE }: { size: number; share: number; stroke?: number }) {
   const p = usePalette();
-  const r = (size - STROKE) / 2;
+  const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   return (
     <Svg width={size} height={size}>
-      <Circle cx={size / 2} cy={size / 2} r={r} stroke={p.surfaceAlt} strokeWidth={STROKE} fill="none" opacity={0.9} />
+      <Circle cx={size / 2} cy={size / 2} r={r} stroke={p.surfaceAlt} strokeWidth={stroke} fill="none" opacity={0.9} />
       <Circle
-        cx={size / 2} cy={size / 2} r={r} stroke={p.accent} strokeWidth={STROKE} fill="none" strokeLinecap="round"
+        cx={size / 2} cy={size / 2} r={r} stroke={p.accent} strokeWidth={stroke} fill="none" strokeLinecap="round"
         strokeDasharray={`${c} ${c}`} strokeDashoffset={c * (1 - share)} transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
     </Svg>
@@ -73,7 +76,9 @@ function Session({ routine }: { routine: MemberRoutine }) {
   const [index, setIndex] = useState(0);
   const [remaining, setRemaining] = useState(durations[0] ?? 0);
   const [running, setRunning] = useState(true);
-  const [showVideo, setShowVideo] = useState(false);
+  // shape of the current exercise video (width / height), reported by the player
+  const [videoAspect, setVideoAspect] = useState(PORTRAIT);
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const [finished, setFinished] = useState<RoutineStats | null>(null);
   const [earned, setEarned] = useState<Badge[]>([]);
   // end time of the running countdown (set when it starts or resumes)
@@ -99,7 +104,7 @@ function Session({ routine }: { routine: MemberRoutine }) {
     setIndex(next);
     setRemaining(durations[next] ?? s.durationSec);
     endsAt.current = Date.now() + (durations[next] ?? s.durationSec) * 1000;
-    setShowVideo(false);
+    setVideoAspect(PORTRAIT);
     buzz('step');
     announce(next);
   };
@@ -123,7 +128,6 @@ function Session({ routine }: { routine: MemberRoutine }) {
 
   // first exercise announced once; speech stops when leaving
   useEffect(() => {
-    prepareVoice();
     announce(0);
     return () => stopVoice();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only at the start of the run
@@ -202,14 +206,84 @@ function Session({ routine }: { routine: MemberRoutine }) {
 
   const dur = durations[index] ?? step.durationSec;
   const share = dur > 0 ? remaining / dur : 0;
-  const time = (
+  const anyVideo = routine.steps.some((x) => x.videoId && x.videoAvailable);
+  const video = !!(step.videoId && step.videoAvailable) && prefs.video;
+  const contentW = screenW - 2 * space.l;
+  const time = (big: boolean) => (
     <View style={{ position: 'absolute', alignItems: 'center' }}>
-      <Txt style={{ fontSize: mirror ? 30 : 56, lineHeight: mirror ? 36 : 64, fontWeight: '700', fontVariant: ['tabular-nums'] }} accessibilityLabel={`noch ${remaining} Sekunden`}>
+      <Txt style={{ fontSize: big ? 56 : 24, lineHeight: big ? 64 : 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} accessibilityLabel={`noch ${remaining} Sekunden`}>
         {clock(remaining)}
       </Txt>
-      {!running ? <Txt variant="small" muted>Pausiert</Txt> : null}
+      {!running ? <Txt variant="small" muted style={{ fontSize: big ? 14 : 11 }}>Pausiert</Txt> : null}
     </View>
   );
+  /** The countdown as a small round badge (on the picture or on the seam between video and mirror). */
+  const badge = (size: number, style: ViewStyle) => (
+    <View style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }, style]}>
+      <Ring size={size} share={share} stroke={8} />
+      {time(false)}
+    </View>
+  );
+  const videoPane = (
+    <LessonPlayer
+      key={step.id}
+      variant="coach"
+      playing={running}
+      onAspect={setVideoAspect}
+      playPath={`/api/member/videos/${encodeURIComponent(step.videoId ?? '')}/play`}
+    />
+  );
+  const mirrorPane = <CameraView style={StyleSheet.absoluteFill} facing="front" mirror />;
+
+  let stage: ReactNode;
+  if (video && mirror) {
+    const BADGE = 92;
+    if (videoAspect < 1) {
+      // portrait video: two equal panes side by side
+      const paneW = Math.floor((contentW - space.s) / 2);
+      const paneH = Math.round(Math.min(paneW / videoAspect, screenH * 0.56));
+      stage = (
+        <View style={{ marginBottom: BADGE / 2 - space.s }}>
+          <View style={{ flexDirection: 'row', gap: space.s }}>
+            <Pane label="Vormachen" width={paneW} height={paneH}>{videoPane}</Pane>
+            <Pane label="Du" width={paneW} height={paneH}>{mirrorPane}</Pane>
+          </View>
+          {badge(BADGE, { left: (contentW - BADGE) / 2, bottom: -BADGE / 2 })}
+        </View>
+      );
+    } else {
+      // landscape video: video above, the mirror below
+      const videoH = Math.round(contentW / videoAspect);
+      const mirrorH = Math.round(Math.min(contentW * 0.75, screenH * 0.34));
+      stage = (
+        <View style={{ gap: space.s, marginBottom: BADGE / 2 - space.s }}>
+          <Pane label="Vormachen" width={contentW} height={videoH}>{videoPane}</Pane>
+          <Pane label="Du" width={contentW} height={mirrorH}>{mirrorPane}</Pane>
+          {badge(BADGE, { left: (contentW - BADGE) / 2, bottom: -BADGE / 2 })}
+        </View>
+      );
+    }
+  } else if (video || mirror) {
+    // one picture: the video in its own shape, or the mirror (3:4); the countdown in the corner
+    const a = video ? videoAspect : 3 / 4;
+    const h = Math.round(Math.min(contentW / a, screenH * 0.58));
+    const w = Math.round(Math.min(contentW, h * a));
+    stage = (
+      <View style={{ alignSelf: 'center' }}>
+        <Pane label={video ? 'Vormachen' : 'Du'} width={w} height={h}>
+          {video ? videoPane : mirrorPane}
+          {badge(104, { right: space.m, bottom: space.m, opacity: 0.94 })}
+        </Pane>
+      </View>
+    );
+  } else {
+    stage = (
+      <View style={{ alignItems: 'center', justifyContent: 'center', marginVertical: space.m }}>
+        <Ring size={240} share={share} />
+        {time(true)}
+      </View>
+    );
+  }
 
   return (
     <Screen contentStyle={{ paddingTop: insets.top + space.m, gap: space.l }}>
@@ -225,30 +299,18 @@ function Session({ routine }: { routine: MemberRoutine }) {
         <Txt variant="small" muted>{index + 1}/{routine.steps.length}</Txt>
       </View>
 
-      <View style={{ flexDirection: 'row', gap: space.s }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
         <OptionChip icon={prefs.mirror ? 'scan' : 'scan-outline'} label="Spiegel" on={prefs.mirror} onPress={() => void toggleMirror()} />
+        {anyVideo ? <OptionChip icon={prefs.video ? 'videocam' : 'videocam-outline'} label="Video" on={prefs.video} onPress={() => update({ video: !prefs.video })} /> : null}
         <OptionChip icon={prefs.voice ? 'volume-high' : 'volume-mute'} label="Ansage" on={prefs.voice} onPress={() => { if (prefs.voice) stopVoice(); update({ voice: !prefs.voice }); }} />
       </View>
 
       <View style={{ gap: space.xs }}>
         <Txt variant="caption" color={p.accent}>Übung {index + 1}</Txt>
-        <Txt variant="display">{step.title}</Txt>
+        <Txt variant={video && mirror ? 'title' : 'display'}>{step.title}</Txt>
       </View>
 
-      {mirror ? (
-        <View style={{ aspectRatio: 3 / 4, maxHeight: 460, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: '#000' }}>
-          <CameraView style={StyleSheet.absoluteFill} facing="front" mirror />
-          <View style={{ position: 'absolute', right: space.m, bottom: space.m, width: 120, height: 120, borderRadius: 60, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', opacity: 0.92 }}>
-            <Ring size={120} share={share} />
-            {time}
-          </View>
-        </View>
-      ) : (
-        <View style={{ alignItems: 'center', justifyContent: 'center', marginVertical: space.m }}>
-          <Ring size={240} share={share} />
-          {time}
-        </View>
-      )}
+      {stage}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xl }}>
         <RoundButton icon="play-skip-back" label="Vorherige Übung" disabled={index === 0} onPress={() => goTo(index - 1)} />
@@ -258,14 +320,25 @@ function Session({ routine }: { routine: MemberRoutine }) {
 
       {step.description ? <Txt style={{ marginTop: space.s }}>{step.description}</Txt> : null}
 
-      {step.videoId && step.videoAvailable ? (
-        showVideo ? (
-          <LessonPlayer key={step.id} playPath={`/api/member/videos/${encodeURIComponent(step.videoId)}/play`} />
-        ) : (
-          <Button label={`Übung im Video ansehen${step.videoTitle ? `: ${step.videoTitle}` : ''}`} kind="secondary" onPress={() => { setRunning(false); setShowVideo(true); }} />
-        )
+      {step.videoId && step.videoAvailable && !prefs.video ? (
+        <Button label={`Video einblenden${step.videoTitle ? `: ${step.videoTitle}` : ''}`} kind="secondary" onPress={() => update({ video: true })} />
+      ) : null}
+      {video && !mirror && Platform.OS !== 'web' ? (
+        <Button label="Spiegel daneben einschalten" kind="ghost" onPress={() => void toggleMirror()} />
       ) : null}
     </Screen>
+  );
+}
+
+/** One picture of the stage (video or mirror) with a small label in the corner. */
+function Pane({ label, width, height, children }: { label: string; width: number; height: number; children: ReactNode }) {
+  return (
+    <View style={{ width, height, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: '#000000' }}>
+      {children}
+      <View pointerEvents="none" style={{ position: 'absolute', top: space.s, left: space.s, paddingHorizontal: space.s, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <Txt variant="small" color="#FFFFFF" style={{ fontWeight: '700', fontSize: 12, lineHeight: 16 }}>{label}</Txt>
+      </View>
+    </View>
   );
 }
 
