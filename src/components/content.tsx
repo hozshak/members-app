@@ -114,3 +114,24 @@ export function LessonRow({ video, index }: { video: VideoCard; index: number })
     </Card>
   );
 }
+
+/** A lesson as one line with where it is (Merkliste, search results). */
+export function LessonLink({ id, title, subtitle, icon = 'play-circle-outline' }: {
+  id: string; title: string; subtitle: string; icon?: keyof typeof Ionicons.glyphMap;
+}) {
+  const p = usePalette();
+  const open = useOpen();
+  return (
+    <Card onPress={() => open.lesson(id)} accessibilityLabel={title} style={{ flexDirection: 'row', alignItems: 'center', padding: space.m, gap: space.m }}>
+      <Ionicons name={icon} size={24} color={p.accent} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt variant="heading" numberOfLines={2}>{title}</Txt>
+        <Txt variant="small" muted numberOfLines={1}>{subtitle}</Txt>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
+    </Card>
+  );
+}
+
+export const kindLabel = (kind: VideoCard['kind'], durationSec: number | null) =>
+  `${KIND_LABEL[kind]}${durationSec ? ` · ${clock(durationSec)}` : ''}`;

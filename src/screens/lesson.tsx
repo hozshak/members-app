@@ -11,12 +11,13 @@ import { LessonText } from '@/components/lesson-text';
 import { LessonPlayer } from '@/components/player';
 import { Button, Card, ErrorView, Loading, Screen, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
+import { useBookmarks } from '@/lib/bookmarks';
 import { clock } from '@/lib/format';
 import { useOpen } from '@/lib/nav';
 import { useMarkDone, useVideo } from '@/lib/queries';
 import { useApi } from '@/lib/session';
 import { space, usePalette } from '@/lib/theme';
-import type { LessonDoneResult, LikeState } from '@/lib/types';
+import type { LessonDoneResult, LikeState, VideoDetail } from '@/lib/types';
 
 export default function LessonScreen() {
   const p = usePalette();
@@ -60,6 +61,7 @@ export default function LessonScreen() {
         </Txt>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.m }}>
           <Txt variant="title" style={{ flex: 1 }}>{v.title}</Txt>
+          <BookmarkButton video={v} />
           <LikeButton key={v.id} videoId={v.id} liked={v.likedByMe} count={v.likeCount} />
         </View>
         {v.description ? <Txt muted>{v.description}</Txt> : null}
@@ -97,6 +99,24 @@ export default function LessonScreen() {
 
       {v.commentsEnabled ? <Comments key={v.id} videoId={v.id} /> : null}
     </Screen>
+  );
+}
+
+/** "Merken": puts the lesson on the Merkliste of this phone (tab "Inhalte"). */
+function BookmarkButton({ video }: { video: VideoDetail }) {
+  const p = usePalette();
+  const bookmarks = useBookmarks();
+  const saved = bookmarks.has(video.id);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={saved ? 'Von der Merkliste nehmen' : 'Auf die Merkliste'}
+      hitSlop={10}
+      onPress={() => bookmarks.toggle(video)}
+      style={{ paddingTop: 4 }}
+    >
+      <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={24} color={saved ? p.accent : p.textMuted} />
+    </Pressable>
   );
 }
 

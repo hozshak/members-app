@@ -1,6 +1,6 @@
 // Data of the member area (React Query): the same endpoints as the website's member area (src/modules/player/api.ts
 // of the software). Marking a lesson as done refreshes everything that shows progress.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApi } from './session';
 import type {
   LessonDoneResult, MemberCategoryDetail, MemberHome, MemberLibrary, MemberProductDetail, PlayResponse, Profile, ProgressUpdate, Purchase, SessionInfo, VideoDetail,
@@ -82,4 +82,30 @@ export function useSessions() {
 export function usePurchases() {
   const api = useApi();
   return useQuery({ queryKey: ['purchases'] as const, queryFn: async () => (await api.get<{ items: Purchase[] }>('/api/member/purchases')).items });
+}
+
+// ---------- search over every lesson the member can open ----------
+
+/** Loads the categories of the library (cached like the category pages) when `enabled`; lessons with their category. */
+export function useSearchIndex(enabled: boolean) {
+  const api = useApi();
+  const lib = useLibrary();
+  const slugs = enabled && lib.data
+    ? [...new Set([...lib.data.products.flatMap((pr) => pr.categories), ...lib.data.free, ...lib.data.more]
+      .filter((c) => c.access === 'full').map((c) => c.slug))]
+    : [];
+  const results = useQueries({
+    queries: slugs.map((slug) => ({
+      queryKey: keys.category(slug),
+      queryFn: () => api.get<MemberCategoryDetail>(`/api/member/categories/${enc(slug)}`),
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const items = results.flatMap((r) => (r.data ? r.data.videos.filter((v) => !v.locked) : []));
+  return { items: [...new Map(items.map((v) => [v.id, v])).values()], loading: enabled && (lib.isPending || results.some((r) => r.isPending)) };
+}
+
+/** Lower case without accents (ß → ss) for comparing search words. */
+export function searchable(text: string): string {
+  return text.toLocaleLowerCase('de-DE').replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
