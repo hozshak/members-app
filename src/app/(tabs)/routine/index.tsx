@@ -1,6 +1,7 @@
-// Routine overview: today's routine (start it, or "heute erledigt"), the streak (days in a row, best, total), the last
-// five weeks as a calendar, the daily reminder and the progress photos. Several routines of the community are listed
-// one below the other; streak and calendar belong to the first (the main routine).
+// Routine overview: today's routine (length short / normal / long, start it, or "heute erledigt"), a challenge when the
+// coach made the routine one ("Tag 12 von 30"), the streak (days in a row, best, total) with the last five weeks and a
+// share picture, the badges, the reminders (daily, "Serie retten" in the evening, weekly photo) and the progress photos
+// (optionally behind Face ID). Several routines are listed one below the other; streak and badges belong to the first.
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect, type Href } from 'expo-router';
@@ -8,14 +9,21 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, ErrorView, Loading, MenuGroup, Screen, Section, ToggleRow, Txt } from '@/components/ui';
+import { useShareCard } from '@/components/share-card';
+import { Button, Card, ErrorView, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
+import { errorText } from '@/lib/api';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
-import { applyReminder, DEFAULT_REMINDER, listPhotos, loadReminder, useRoutines, type MemberRoutine, type ProgressPhoto, type Reminder } from '@/lib/routine';
+import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
+import {
+  allowNotifications, badgesOf, LENGTH_LABEL, listPhotos, scaledDuration, syncReminders, useChallenge, useRoutinePrefs, useRoutines,
+  type MemberRoutine, type ProgressPhoto, type RoutineLength,
+} from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const LENGTHS: RoutineLength[] = ['short', 'normal', 'long'];
 
 /** The last five weeks (Monday to Sunday) ending with this week, as YYYY-MM-DD; days after today are null. */
 function calendarWeeks(today = new Date()): (string | null)[][] {
@@ -38,13 +46,98 @@ function calendarWeeks(today = new Date()): (string | null)[][] {
   return weeks;
 }
 
+function LengthPicker({ value, onChange, totalFor }: { value: RoutineLength; onChange: (l: RoutineLength) => void; totalFor: (l: RoutineLength) => number }) {
+  const p = usePalette();
+  return (
+    <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', backgroundColor: p.surface, borderRadius: radius.l, padding: 4, gap: 4 }}>
+      {LENGTHS.map((l) => {
+        const on = l === value;
+        return (
+          <Pressable
+            key={l}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            onPress={() => onChange(l)}
+            style={{ flex: 1, alignItems: 'center', paddingVertical: space.s, borderRadius: radius.m, backgroundColor: on ? p.accent : 'transparent' }}
+          >
+            <Txt variant="heading" color={on ? p.onAccent : p.text}>{LENGTH_LABEL[l]}</Txt>
+            <Txt variant="small" color={on ? p.onAccent : p.textMuted}>{minutes(totalFor(l))}</Txt>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function ChallengeBlock({ routine }: { routine: MemberRoutine }) {
+  const p = usePalette();
+  const ch = routine.challenge;
+  const mutate = useChallenge(routine.id);
+  if (!ch) return null;
+  const started = ch.startDay !== null && ch.dayNumber !== null;
+  const leave = () => Alert.alert('Challenge verlassen?', 'Deine erledigten Tage bleiben in deiner Serie. Du kannst jederzeit neu starten.', [
+    { text: 'Abbrechen', style: 'cancel' },
+    { text: 'Verlassen', style: 'destructive', onPress: () => mutate.mutate(false) },
+  ]);
+  return (
+    <View style={{ gap: space.s, padding: space.m, borderRadius: radius.l, backgroundColor: p.surface }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
+        <Ionicons name={ch.completed ? 'trophy' : 'calendar-outline'} size={20} color={p.accent} />
+        <Txt variant="heading" style={{ flex: 1 }}>{ch.days}-Tage-Challenge</Txt>
+        {started && !ch.completed ? <Txt variant="small" muted>Tag {Math.min(ch.dayNumber ?? 1, ch.days)} von {ch.days}</Txt> : null}
+      </View>
+      {ch.completed ? (
+        <Txt>Geschafft! Du hast alle {ch.days} Tage gemacht.</Txt>
+      ) : started ? (
+        <>
+          <ProgressBar value={ch.doneDays / ch.days} />
+          <Txt variant="small" muted>{ch.doneDays} von {ch.days} Tagen erledigt</Txt>
+        </>
+      ) : (
+        <Txt variant="small" muted>Starte heute und mach die Routine {ch.days} Tage lang – die App zählt mit.</Txt>
+      )}
+      {mutate.isError ? <Txt variant="small" color={p.danger}>{errorText(mutate.error)}</Txt> : null}
+      {!started || ch.completed ? (
+        <Button label={ch.completed ? 'Noch einmal starten' : 'Challenge starten'} kind="secondary" onPress={() => mutate.mutate(true)} loading={mutate.isPending} />
+      ) : (
+        <Pressable accessibilityRole="button" onPress={leave} hitSlop={8}><Txt variant="small" muted>Challenge verlassen</Txt></Pressable>
+      )}
+    </View>
+  );
+}
+
+function RoutineCard({ routine, main }: { routine: MemberRoutine; main: boolean }) {
+  const p = usePalette();
+  const [prefs, update] = useRoutinePrefs();
+  const totalFor = (l: RoutineLength) => routine.steps.reduce((sum, s) => sum + scaledDuration(s.durationSec, l), 0);
+  return (
+    <Card style={{ padding: space.l, gap: space.m, backgroundColor: main ? p.accentSoft : p.surface }}>
+      <View style={{ gap: space.xs }}>
+        <Txt variant="caption" color={p.accent}>{routine.stats.doneToday ? 'Heute erledigt' : 'Heute'}</Txt>
+        <Txt variant="title">{routine.title}</Txt>
+        <Txt muted>{plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(totalFor(prefs.length))}</Txt>
+        {routine.description ? <Txt variant="small" muted numberOfLines={3}>{routine.description}</Txt> : null}
+      </View>
+      <LengthPicker value={prefs.length} onChange={(length) => update({ length })} totalFor={totalFor} />
+      <ChallengeBlock routine={routine} />
+      <Button
+        label={routine.stats.doneToday ? 'Noch einmal machen' : 'Routine starten'}
+        kind={routine.stats.doneToday ? 'secondary' : 'primary'}
+        onPress={() => router.push(`/routine/${encodeURIComponent(routine.id)}` as Href)}
+      />
+    </Card>
+  );
+}
+
 function StreakCard({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const { stats } = routine;
   const done = new Set(stats.days);
   const today = localDay();
+  const card = useShareCard({ big: String(stats.streak), label: stats.streak === 1 ? 'Tag in Folge' : 'Tage in Folge', line: routine.title });
   return (
     <Card style={{ padding: space.l, gap: space.l }}>
+      {card.element}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
         <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="flame" size={30} color={p.accent} />
@@ -85,41 +178,69 @@ function StreakCard({ routine }: { routine: MemberRoutine }) {
           </View>
         ))}
       </View>
+      {stats.streak > 0 && Platform.OS !== 'web' ? <Button label="Serie teilen" kind="secondary" onPress={() => void card.share()} /> : null}
     </Card>
   );
 }
 
-function ReminderCard({ routineTitle }: { routineTitle: string }) {
+function BadgesCard({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
-  const [r, setR] = useState<Reminder>(DEFAULT_REMINDER);
-  const [showPicker, setShowPicker] = useState(false);
-  useEffect(() => { void loadReminder().then(setR); }, []);
+  const badges = badgesOf(routine.stats);
+  const earned = badges.filter((b) => b.earned).length;
+  return (
+    <Section title="Abzeichen" action={<Txt variant="small" muted>{earned} von {badges.length}</Txt>}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
+        {badges.map((b) => (
+          <View
+            key={b.id}
+            accessibilityLabel={`${b.detail}${b.earned ? ', erreicht' : ', noch nicht erreicht'}`}
+            style={{ width: '23%', alignItems: 'center', gap: 4, paddingVertical: space.m, borderRadius: radius.l, backgroundColor: b.earned ? p.accentSoft : p.surface, borderWidth: 1, borderColor: p.line, opacity: b.earned ? 1 : 0.55 }}
+          >
+            <Ionicons name={b.earned ? b.icon : 'lock-closed-outline'} size={26} color={b.earned ? p.accent : p.textMuted} />
+            <Txt variant="small" style={{ fontWeight: '700' }}>{b.label}</Txt>
+          </View>
+        ))}
+      </View>
+      <Txt variant="small" muted>Flammen für Tage in Folge, Sterne für Tage insgesamt.</Txt>
+    </Section>
+  );
+}
 
-  const update = async (next: Reminder) => {
-    setR(next);
-    const ok = await applyReminder(next, routineTitle);
-    if (!ok && next.enabled) {
-      setR({ ...next, enabled: false });
-      Alert.alert('Mitteilungen sind aus', 'Erlaube Mitteilungen für die App in den Einstellungen deines Handys, dann klappt die Erinnerung.');
+function RemindersCard({ routine }: { routine: MemberRoutine | null }) {
+  const p = usePalette();
+  const [prefs, update] = useRoutinePrefs();
+  const [showPicker, setShowPicker] = useState(false);
+
+  const turnOn = async (patch: Parameters<typeof update>[0]) => {
+    if (!(await allowNotifications())) {
+      Alert.alert('Mitteilungen sind aus', 'Erlaube Mitteilungen für die App in den Einstellungen deines Handys, dann klappen die Erinnerungen.');
+      return;
     }
+    await syncReminders(update(patch), routine);
   };
-  const time = `${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')} Uhr`;
+  const set = (patch: Parameters<typeof update>[0], on: boolean) => {
+    if (on) void turnOn(patch);
+    else void syncReminders(update(patch), routine);
+  };
+  const time = `${String(prefs.hour).padStart(2, '0')}:${String(prefs.minute).padStart(2, '0')} Uhr`;
   const asDate = new Date();
-  asDate.setHours(r.hour, r.minute, 0, 0);
+  asDate.setHours(prefs.hour, prefs.minute, 0, 0);
 
   return (
-    <View style={{ gap: space.s }}>
+    <Section title="Erinnerungen">
       <MenuGroup>
-        <ToggleRow label="Tägliche Erinnerung" help={r.enabled ? `Jeden Tag um ${time}` : 'Eine Mitteilung, wenn es Zeit für die Routine ist.'} value={r.enabled} onValueChange={(enabled) => void update({ ...r, enabled })} />
-        {r.enabled ? (
+        {routine ? <ToggleRow label="Tägliche Erinnerung" help={prefs.reminder ? `Jeden Tag um ${time}` : 'Eine Mitteilung, wenn es Zeit für die Routine ist.'} value={prefs.reminder} onValueChange={(v) => set({ reminder: v }, v)} /> : null}
+        {routine && prefs.reminder ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Uhrzeit ändern" onPress={() => setShowPicker((s) => !s)} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.l, backgroundColor: p.surface }}>
             <Ionicons name="time-outline" size={22} color={p.accent} />
             <Txt variant="heading" style={{ flex: 1 }}>Uhrzeit</Txt>
             <Txt color={p.accent} variant="heading">{time}</Txt>
           </Pressable>
         ) : null}
+        {routine ? <ToggleRow label="Serie retten" help="Um 20 Uhr, falls du die Routine heute noch nicht gemacht hast." value={prefs.rescue} onValueChange={(v) => set({ rescue: v }, v)} /> : null}
+        <ToggleRow label="Wöchentliches Foto" help="Sonntags um 10 Uhr eine Erinnerung an dein Fortschrittsfoto." value={prefs.photoReminder} onValueChange={(v) => set({ photoReminder: v }, v)} />
       </MenuGroup>
-      {showPicker && r.enabled && Platform.OS !== 'web' ? (
+      {showPicker && prefs.reminder && Platform.OS !== 'web' ? (
         <DateTimePicker
           value={asDate}
           mode="time"
@@ -127,15 +248,18 @@ function ReminderCard({ routineTitle }: { routineTitle: string }) {
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(event, date) => {
             if (Platform.OS !== 'ios') setShowPicker(false);
-            if (event.type === 'set' && date) void update({ ...r, hour: date.getHours(), minute: date.getMinutes() });
+            if (event.type === 'set' && date) void syncReminders(update({ hour: date.getHours(), minute: date.getMinutes() }), routine);
           }}
         />
       ) : null}
-    </View>
+    </Section>
   );
 }
 
 function PhotosCard() {
+  const p = usePalette();
+  const [prefs] = useRoutinePrefs();
+  const visible = usePhotosVisible(prefs.photoLock);
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   useFocusEffect(useCallback(() => { setPhotos(listPhotos()); }, []));
   const first = photos[0];
@@ -146,7 +270,12 @@ function PhotosCard() {
         <Txt variant="heading">Fortschrittsfotos</Txt>
         <Txt variant="small" muted>Einmal pro Woche ein Foto im gleichen Licht – so siehst du, was sich verändert. Die Fotos bleiben nur auf deinem Handy.</Txt>
       </View>
-      {first && last && first !== last ? (
+      {photos.length > 0 && !visible ? (
+        <Pressable accessibilityRole="button" onPress={() => void unlockPhotos()} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, padding: space.m, borderRadius: radius.m, backgroundColor: p.surfaceAlt }}>
+          <Ionicons name="lock-closed" size={20} color={p.accent} />
+          <Txt variant="heading" style={{ flex: 1 }}>Fotos entsperren</Txt>
+        </Pressable>
+      ) : first && last && first !== last ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Vergleich ansehen" onPress={() => router.push('/routine/fotos' as Href)} style={{ flexDirection: 'row', gap: space.s }}>
           {[first, last].map((ph, i) => (
             <View key={ph.name} style={{ flex: 1, gap: space.xs }}>
@@ -171,10 +300,16 @@ export default function RoutineScreen() {
   const insets = useSafeAreaInsets();
   const { community } = useSession();
   const q = useRoutines();
+  const [prefs] = useRoutinePrefs();
+  const main = q.data?.[0] ?? null;
+
+  // keep the scheduled reminders in line with today's state (e.g. no "Serie retten" once today is done)
+  useEffect(() => {
+    if (q.data) void syncReminders(prefs, main);
+  }, [q.data, prefs, main]);
 
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
-  const [main, ...more] = q.data;
 
   return (
     <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
@@ -188,28 +323,15 @@ export default function RoutineScreen() {
         </Card>
       ) : (
         <>
-          {[main, ...more].map((r) => (
-            <Card key={r.id} style={{ padding: space.l, gap: space.m, backgroundColor: r === main ? p.accentSoft : p.surface }}>
-              <View style={{ gap: space.xs }}>
-                <Txt variant="caption" color={p.accent}>{r.stats.doneToday ? 'Heute erledigt' : 'Heute'}</Txt>
-                <Txt variant="title">{r.title}</Txt>
-                <Txt muted>{plural(r.steps.length, 'Übung', 'Übungen')} · {minutes(r.totalSec)}</Txt>
-                {r.description ? <Txt variant="small" muted numberOfLines={3}>{r.description}</Txt> : null}
-              </View>
-              <Button
-                label={r.stats.doneToday ? 'Noch einmal machen' : 'Routine starten'}
-                kind={r.stats.doneToday ? 'secondary' : 'primary'}
-                onPress={() => router.push(`/routine/${encodeURIComponent(r.id)}` as Href)}
-              />
-            </Card>
-          ))}
+          {q.data.map((r) => <RoutineCard key={r.id} routine={r} main={r === main} />)}
           <Section title="Deine Serie">
             <StreakCard routine={main} />
           </Section>
-          <ReminderCard routineTitle={main.title} />
+          <BadgesCard routine={main} />
         </>
       )}
 
+      <RemindersCard routine={main} />
       <PhotosCard />
     </Screen>
   );

@@ -9,7 +9,8 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Ellipse, Mask, Rect } from 'react-native-svg';
 import { Button, Screen, Txt } from '@/components/ui';
-import { listPhotos, savePhoto } from '@/lib/routine';
+import { usePhotosVisible } from '@/lib/photo-lock';
+import { listPhotos, savePhoto, useRoutinePrefs } from '@/lib/routine';
 import { space, usePalette } from '@/lib/theme';
 
 export default function CameraScreen() {
@@ -20,6 +21,9 @@ export default function CameraScreen() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ghost, setGhost] = useState(true);
+  const [prefs] = useRoutinePrefs();
+  // the earlier photo as a template only when the photos are not locked away
+  const photosVisible = usePhotosVisible(prefs.photoLock);
   const [last] = useState(() => listPhotos().at(-1) ?? null);
 
   if (!permission) return <View style={{ flex: 1, backgroundColor: '#000' }} />;
@@ -49,7 +53,7 @@ export default function CameraScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="front" mirror onCameraReady={() => setReady(true)} />
-      {last && ghost ? <Image source={{ uri: last.uri }} style={[StyleSheet.absoluteFill, { opacity: 0.3 }]} contentFit="cover" pointerEvents="none" /> : null}
+      {last && ghost && photosVisible ? <Image source={{ uri: last.uri }} style={[StyleSheet.absoluteFill, { opacity: 0.3 }]} contentFit="cover" pointerEvents="none" /> : null}
       <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
         <Defs>
           <Mask id="hole">
@@ -69,7 +73,7 @@ export default function CameraScreen() {
       </View>
 
       <View style={{ position: 'absolute', bottom: insets.bottom + space.xl, left: 0, right: 0, alignItems: 'center', gap: space.m }}>
-        {last ? (
+        {last && photosVisible ? (
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: ghost }} onPress={() => setGhost((g) => !g)} style={{ paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' }}>
             <Txt variant="small" color="#FFFFFF">{ghost ? 'Letztes Foto ausblenden' : 'Letztes Foto einblenden'}</Txt>
           </Pressable>

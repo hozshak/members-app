@@ -72,6 +72,13 @@
         {
           "color": "#C2410C"
         }
+      ],
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Damit nur du deine Fortschrittsfotos sehen kannst."
+        }
       ]
     ],
     "experiments": {
