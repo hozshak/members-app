@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CategoryTile } from '@/components/content';
 import { ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
-import { plural } from '@/lib/format';
+import { plural, uniqueById } from '@/lib/format';
 import { useOpen } from '@/lib/nav';
 import { useLibrary } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
@@ -26,7 +26,7 @@ export default function LibraryScreen() {
       <Txt variant="display">Inhalte</Txt>
 
       {lib.products.map((product) => {
-        const categories = product.categories.filter((c) => c.access !== 'teaser');
+        const categories = uniqueById(product.categories.filter((c) => c.access !== 'teaser'));
         const share = product.itemCount > 0 ? product.doneCount / product.itemCount : 0;
         return (
           <View key={product.id} style={{ gap: space.m }}>
@@ -49,13 +49,13 @@ export default function LibraryScreen() {
 
       {lib.free.length > 0 ? (
         <Section title="Für alle Mitglieder">
-          <View style={{ gap: space.m }}>{lib.free.map((c) => <CategoryTile key={c.id} category={c} />)}</View>
+          <View style={{ gap: space.m }}>{uniqueById(lib.free).map((c) => <CategoryTile key={c.id} category={c} />)}</View>
         </Section>
       ) : null}
 
       {lib.more.length > 0 ? (
         <Section title="Weitere Inhalte">
-          <View style={{ gap: space.m }}>{lib.more.map((c) => <CategoryTile key={c.id} category={c} />)}</View>
+          <View style={{ gap: space.m }}>{uniqueById(lib.more).map((c) => <CategoryTile key={c.id} category={c} />)}</View>
         </Section>
       ) : null}
 

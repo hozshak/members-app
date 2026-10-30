@@ -5,6 +5,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, TextInput, View } from 'react-native';
 import { errorText } from '@/lib/api';
+import { uniqueById } from '@/lib/format';
 import { useApi } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 import type { Comment, CommentsPage, LikeState } from '@/lib/types';
@@ -49,7 +50,8 @@ export function Comments({ videoId }: { videoId: string }) {
   });
 
   const total = q.data?.pages[0]?.total ?? 0;
-  const items = q.data?.pages.flatMap((pg) => pg.items) ?? [];
+  // a comment can show up on two pages when new ones arrived in between
+  const items = uniqueById(q.data?.pages.flatMap((pg) => pg.items) ?? []);
 
   return (
     <View style={{ gap: space.m }}>

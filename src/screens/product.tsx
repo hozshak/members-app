@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { CategoryTile, LessonRow } from '@/components/content';
 import { DownloadRow } from '@/components/download';
 import { Cover, ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
-import { plural } from '@/lib/format';
+import { plural, uniqueById } from '@/lib/format';
 import { useProduct } from '@/lib/queries';
 import { space } from '@/lib/theme';
 
@@ -15,7 +15,7 @@ export default function ProductScreen() {
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
   const product = q.data;
-  const categories = product.categories.filter((c) => c.access !== 'teaser');
+  const categories = uniqueById(product.categories.filter((c) => c.access !== 'teaser'));
   const share = product.itemCount > 0 ? product.doneCount / product.itemCount : 0;
 
   return (
@@ -39,7 +39,7 @@ export default function ProductScreen() {
       {product.newItems.length > 0 ? (
         <Section title="Neu für dich">
           <View style={{ gap: space.s }}>
-            {product.newItems.map((v, i) => <LessonRow key={v.id} video={v} index={i + 1} />)}
+            {uniqueById(product.newItems).map((v, i) => <LessonRow key={v.id} video={v} index={i + 1} />)}
           </View>
         </Section>
       ) : null}

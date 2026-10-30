@@ -30,3 +30,9 @@ export function greeting(date = new Date()): string {
   if (h < 18) return 'Hallo';
   return 'Guten Abend';
 }
+
+/** Each id once, first occurrence wins (the same video or category can come from two programmes). */
+export function uniqueById<T extends { id: string }>(items: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((it) => (seen.has(it.id) ? false : (seen.add(it.id), true)));
+}

@@ -5,7 +5,7 @@ import { FlatList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryTile, ContinueTile, ProductTile } from '@/components/content';
 import { ErrorView, Loading, Screen, Section, Txt } from '@/components/ui';
-import { greeting } from '@/lib/format';
+import { greeting, uniqueById } from '@/lib/format';
 import { useHome } from '@/lib/queries';
 import { useSession } from '@/lib/session';
 import { space, usePalette } from '@/lib/theme';
@@ -20,7 +20,8 @@ export default function HomeScreen() {
   if (home.isError) return <ErrorView error={home.error} onRetry={() => void home.refetch()} />;
   const h = home.data;
   const name = h.greetingName || me?.firstName || '';
-  const others = [...h.free, ...h.more];
+  const others = uniqueById([...h.free, ...h.more]);
+  const continueWatching = uniqueById(h.continueWatching);
   const empty = h.products.length === 0 && others.length === 0;
 
   return (
@@ -34,11 +35,11 @@ export default function HomeScreen() {
         <Txt variant="display">{name ? `${greeting()}, ${name}` : greeting()}</Txt>
       </View>
 
-      {h.continueWatching.length > 0 ? (
+      {continueWatching.length > 0 ? (
         <Section title="Weiterschauen">
           <FlatList
             horizontal
-            data={h.continueWatching}
+            data={continueWatching}
             keyExtractor={(v) => v.id}
             renderItem={({ item }) => <ContinueTile video={item} />}
             ItemSeparatorComponent={() => <View style={{ width: space.m }} />}
