@@ -14,7 +14,12 @@
   },
   "submit": {
     "production": {
-      "ios": { "ascAppId": "6829750202" }
+      "ios": {
+        "ascAppId": "6829750202",
+        "ascApiKeyPath": "C:/Users/hozan.shaker/.geheim/AuthKey_59WR3M734D.p8",
+        "ascApiKeyId": "59WR3M734D",
+        "ascApiKeyIssuerId": "cb1544d3-61cb-49f5-8fd5-16716b38f461"
+      }
     }
   }
 }
