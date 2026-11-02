@@ -2,6 +2,7 @@
   "expo": {
     "name": "Members",
     "slug": "members",
+    "owner": "en0o0n",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -117,6 +118,28 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "ExpoWidgetsTarget",
+                  "bundleIdentifier": "com.en0o0n.members.ExpoWidgetsTarget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.en0o0n.members"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "6d13e098-efe4-422b-980d-54a8a3700996"
+      }
     }
   }
 }
