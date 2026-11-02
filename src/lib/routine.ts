@@ -105,12 +105,12 @@ export interface RoutinePrefs {
   photoLock: boolean;
   /** In the routine: front camera as a mirror, small sounds, length. */
   mirror: boolean; sound: boolean; length: RoutineLength;
-  /** The exercise video next to the mirror (on by default). */
-  video: boolean;
+  /** The exercise video next to the mirror (on by default), and whether it plays without sound. */
+  video: boolean; videoMuted: boolean;
 }
 const PREFS_KEY = 'members.routine';
 export const DEFAULT_PREFS: RoutinePrefs = {
-  reminder: false, hour: 8, minute: 0, rescue: false, photoReminder: false, photoLock: false, mirror: false, sound: true, length: 'normal', video: true,
+  reminder: false, hour: 8, minute: 0, rescue: false, photoReminder: false, photoLock: false, mirror: false, sound: true, length: 'normal', video: true, videoMuted: false,
 };
 
 export async function loadPrefs(): Promise<RoutinePrefs> {

@@ -7,9 +7,11 @@
 // small picture between black bars.
 // While the video has to wait for data it says so ("Internet langsam – Video lädt …" after a moment). A lesson video can be
 // enlarged to the whole screen and back, also with a watermark (the watermark stays on the picture).
+// "Neu laden" gets a new address and goes on at the same place (a stuck stream, or another device took over the stream).
 // Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, plays exactly while
-// `playing` is true (the countdown of the exercise), has a "10 seconds back" button instead of controls; the parent learns
-// the video's shape (onAspect) and when it waits for data (onWaiting).
+// `playing` is true (the countdown of the exercise), has buttons for "10 seconds back", "Neu laden" and sound instead of
+// controls; the parent learns the video's shape (onAspect) and when it waits for data (onWaiting). A picture that stands
+// still although it should play counts as waiting, and a stuck video reloads by itself (at most twice per stall).
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
@@ -42,17 +44,36 @@ export interface LessonPlayerProps {
   onWaiting?: (waiting: boolean) => void;
   /** coach: a very small picture (no button, no text). */
   mini?: boolean;
+  /** coach: without sound. */
+  muted?: boolean;
+  onToggleMuted?: () => void;
 }
 
 /** After this long without data the waiting indicator also says why. */
 const SLOW_AFTER_MS = 2500;
+/** coach: the picture stands still for this many seconds although it should play: it counts as waiting. */
+const FROZEN_AFTER_SEC = 5;
+/** coach: still waiting after this long: a new address by itself, at most AUTO_RELOADS times per stall. */
+const AUTO_RELOAD_MS = 9000;
+const AUTO_RELOADS = 2;
 
 /** Jumps to a position. expo-video's player is an imperative native object: seeking is assigning `currentTime`. */
 function seek(player: VideoPlayer, at: number): void {
   player.currentTime = at;
 }
 
-export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onCompleted, variant = 'lesson', playing, onAspect, onWaiting, mini = false }: LessonPlayerProps) {
+function setMuted(player: VideoPlayer, muted: boolean): void {
+  player.muted = muted;
+}
+
+/** Development: what happened to the stream, in the log of the dev server (never the address: it carries the token). */
+function logVideo(what: string, detail?: string): void {
+  if (__DEV__) console.warn(`[Video] ${what}${detail ? `: ${detail.replace(/([?&]t=)[^&\s]+/g, '$1…')}` : ''}`);
+}
+
+export function LessonPlayer({
+  playPath, progressPath, aspect = 16 / 9, onCompleted, variant = 'lesson', playing, onAspect, onWaiting, mini = false, muted = false, onToggleMuted,
+}: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
   const insets = useSafeAreaInsets();
@@ -67,8 +88,10 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   const [loaded, setLoaded] = useState(false);
   const [play, setPlay] = useState<PlayResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [attempt, setAttempt] = useState(0);
+  const [frozen, setFrozen] = useState(false);
   const alive = useRef(true);
+  const reloading = useRef(false);
+  const autoReloads = useRef(0);
   const savedAt = useRef(0);
   const completedSent = useRef(false);
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
@@ -83,6 +106,9 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   };
   useEventListener(player, 'sourceLoad', ({ availableVideoTracks }) => takeSize(availableVideoTracks[0]?.size));
   useEventListener(player, 'videoTrackChange', ({ videoTrack }) => takeSize(videoTrack?.size));
+  useEventListener(player, 'statusChange', (e) => {
+    if (e.status === 'error') logVideo('Fehler', e.error?.message);
+  });
 
   const attach = useCallback(async (resp: PlayResponse, at: number, autoplay: boolean) => {
     await player.replaceAsync({ uri: api.url(resp.src), headers: api.mediaHeaders() });
@@ -91,7 +117,32 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
     if (autoplay) player.play();
   }, [api, player]);
 
-  // first token (and again after "Noch einmal", which also clears the error)
+  /** A new token and address, at the same place (button "Neu laden", "Noch einmal", a stuck video). */
+  const reload = useCallback(async (why: string) => {
+    if (reloading.current) return;
+    reloading.current = true;
+    const at = player.currentTime;
+    const wasPlaying = player.playing;
+    logVideo('neu laden', `${why} bei ${Math.round(at)} s`);
+    setLoaded(false);
+    setError(null);
+    setFrozen(false);
+    try {
+      const resp = await api.post<PlayResponse>(playPath);
+      if (!alive.current) return;
+      setPlay(resp);
+      // coach: `playing` starts it again as soon as it is loaded
+      await attach(resp, at, !coach && wasPlaying);
+      if (alive.current) setLoaded(true);
+    } catch (err) {
+      logVideo('neu laden fehlgeschlagen', err instanceof Error ? err.message : undefined);
+      if (alive.current) setError(err);
+    } finally {
+      reloading.current = false;
+    }
+  }, [api, attach, coach, playPath, player]);
+
+  // first token
   useEffect(() => {
     alive.current = true;
     void (async () => {
@@ -107,7 +158,29 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
       }
     })();
     return () => { alive.current = false; };
-  }, [api, playPath, attach, attempt, coach]);
+  }, [api, playPath, attach, coach]);
+
+  // coach: the sound of the video
+  useEffect(() => {
+    if (coach) setMuted(player, muted);
+  }, [coach, muted, player]);
+
+  // coach: a picture that stands still although it should play (no status tells that)
+  useEffect(() => {
+    if (!coach || !loaded || !playing || status !== 'readyToPlay') return;
+    let last = player.currentTime;
+    let still = 0;
+    const t = setInterval(() => {
+      const now = player.currentTime;
+      still = Math.abs(now - last) < 0.05 ? still + 1 : 0;
+      last = now;
+      setFrozen(still >= FROZEN_AFTER_SEC);
+    }, 1000);
+    return () => {
+      clearInterval(t);
+      setFrozen(false);
+    };
+  }, [coach, loaded, playing, player, status]);
 
   // coach: plays exactly while the exercise runs
   useEffect(() => {
@@ -174,7 +247,7 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
 
   // waiting for data: says so, after a moment also why
   const failed = !!error || status === 'error';
-  const waiting = !failed && (!loaded || status === 'loading');
+  const waiting = !failed && (!loaded || status === 'loading' || frozen);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (!waiting) return;
@@ -187,6 +260,19 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   useEffect(() => {
     onWaiting?.(waiting);
   }, [onWaiting, waiting]);
+  // coach: stuck for a while: a new address by itself
+  useEffect(() => {
+    if (!waiting) {
+      autoReloads.current = 0;
+      return;
+    }
+    if (!coach || autoReloads.current >= AUTO_RELOADS) return;
+    const t = setTimeout(() => {
+      autoReloads.current += 1;
+      void reload(`hängt seit ${AUTO_RELOAD_MS / 1000} s (Versuch ${autoReloads.current})`);
+    }, AUTO_RELOAD_MS);
+    return () => clearTimeout(t);
+  }, [coach, loaded, reload, waiting]);
 
   const toggleLarge = () => {
     const wasPlaying = player.playing;
@@ -196,9 +282,15 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
 
   const wm = play?.watermark;
   const waitingView = waiting ? (
-    <View style={[StyleSheet.absoluteFill, styles.center, { gap: space.s, padding: space.s, backgroundColor: slow ? 'rgba(0,0,0,0.45)' : 'transparent' }]} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, styles.center, { gap: space.s, padding: space.s, backgroundColor: slow ? 'rgba(0,0,0,0.45)' : 'transparent' }]} pointerEvents="box-none">
       <ActivityIndicator color="#FFFFFF" />
       {slow && !mini ? <Text style={styles.slow} accessibilityLiveRegion="polite">Internet langsam – Video lädt …</Text> : null}
+      {slow && !mini ? (
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => void reload('Knopf')} style={styles.reload}>
+          <Ionicons name="refresh" size={16} color="#FFFFFF" />
+          <Text style={styles.reloadText}>Neu laden</Text>
+        </Pressable>
+      ) : null}
     </View>
   ) : null;
   return (
@@ -216,7 +308,11 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
       {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
       {waitingView}
       {coach && !mini && !failed ? (
-        <RoundIcon icon="play-back" label="10 Sekunden zurück" onPress={() => player.seekBy(-10)} style={{ position: 'absolute', left: space.s, bottom: space.s }} />
+        <View style={{ position: 'absolute', left: space.s, bottom: space.s, flexDirection: 'row', gap: space.xs }}>
+          <RoundIcon icon="play-back" label="10 Sekunden zurück" onPress={() => player.seekBy(-10)} />
+          <RoundIcon icon="refresh" label="Video neu laden" onPress={() => void reload('Knopf')} />
+          {onToggleMuted ? <RoundIcon icon={muted ? 'volume-mute' : 'volume-high'} label={muted ? 'Video-Ton einschalten' : 'Video stumm schalten'} onPress={onToggleMuted} /> : null}
+        </View>
       ) : null}
       {!coach && !failed ? (
         <RoundIcon icon="expand" label="Video vergrößern" onPress={toggleLarge} style={{ position: 'absolute', right: space.s, top: space.s }} />
@@ -241,7 +337,7 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
       {failed ? (
         <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: 'rgba(0,0,0,0.75)', padding: coach ? space.s : space.l, gap: space.m }]}>
           <Txt color="#FFFFFF" variant={coach ? 'small' : 'body'} style={{ textAlign: 'center' }}>{error ? errorText(error) : 'Das Video konnte nicht geladen werden.'}</Txt>
-          <Button label="Noch einmal" kind="secondary" onPress={() => { setPlay(null); setLoaded(false); setError(null); setAttempt((a) => a + 1); }} />
+          <Button label="Noch einmal" kind="secondary" onPress={() => void reload('Noch einmal')} />
         </View>
       ) : null}
     </View>
@@ -287,5 +383,7 @@ const styles = StyleSheet.create({
   frame: { maxWidth: '100%', backgroundColor: '#000000', overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
   slow: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  reload: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: space.m, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.65)' },
+  reloadText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
 });

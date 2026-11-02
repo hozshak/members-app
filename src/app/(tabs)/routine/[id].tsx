@@ -273,9 +273,12 @@ function Session({ routine }: { routine: MemberRoutine }) {
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
       <OptionChip icon={prefs.mirror ? 'scan' : 'scan-outline'} label="Spiegel" on={prefs.mirror} onPress={() => void toggleMirror()} />
       {routine.steps.some((x) => x.videoId && x.videoAvailable) ? (
-        <OptionChip icon={prefs.video ? 'videocam' : 'videocam-outline'} label="Video" on={prefs.video} onPress={() => update({ video: !prefs.video })} />
+        <>
+          <OptionChip icon={prefs.video ? 'videocam' : 'videocam-outline'} label="Video" on={prefs.video} onPress={() => update({ video: !prefs.video })} />
+          <OptionChip icon={prefs.videoMuted ? 'volume-mute' : 'volume-high'} label="Video-Ton" on={!prefs.videoMuted} onPress={() => update({ videoMuted: !prefs.videoMuted })} />
+        </>
       ) : null}
-      <OptionChip icon={prefs.sound ? 'musical-note' : 'volume-mute'} label="Ton" on={prefs.sound} onPress={() => update({ sound: !prefs.sound })} />
+      <OptionChip icon={prefs.sound ? 'musical-note' : 'notifications-off-outline'} label="Signaltöne" on={prefs.sound} onPress={() => update({ sound: !prefs.sound })} />
     </View>
   );
 
@@ -404,6 +407,8 @@ function Session({ routine }: { routine: MemberRoutine }) {
             playing={phase === 'run' && running}
             onAspect={setVideoAspect}
             onWaiting={onWaiting}
+            muted={prefs.videoMuted}
+            onToggleMuted={() => update({ videoMuted: !prefs.videoMuted })}
             playPath={`/api/member/videos/${encodeURIComponent(step.videoId ?? '')}/play`}
           />
         </Pane>
