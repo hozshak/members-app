@@ -18,6 +18,7 @@ export default function RoutineStack() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="[id]" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
+      <Stack.Screen name="zone" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
       <Stack.Screen name="fotos" options={{ title: 'Fortschrittsfotos' }} />
       <Stack.Screen name="ziel" options={{ title: 'Mein Ziel' }} />
       <Stack.Screen name="kamera" options={{ headerShown: false, presentation: 'fullScreenModal' }} />

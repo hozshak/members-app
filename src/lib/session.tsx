@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { ApiError, createApi, normalizeBaseUrl, type ApiClient } from './api';
 import { getItem, removeItem, setItem } from './storage';
 import type { Bootstrap, LoginResponse, Me } from './types';
+import { clearRoutineWidget } from './widget';
 
 export interface Community {
   url: string;
@@ -57,6 +58,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setMe(null);
     qc.clear();
+    clearRoutineWidget();
     await removeItem(TOKEN_KEY);
   }, [qc, tokens]);
 

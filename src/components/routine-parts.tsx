@@ -1,5 +1,5 @@
-// Small pieces shared by the routine screens: the progress ring, the length picker (Kurz / Normal / Lang), this week as a
-// row of days, and the routine of today as a card for the start page.
+// Small pieces shared by the routine screens: the progress ring, the length picker (Kurz / Normal / Lang), the minutes of a
+// zone session, this week as a row of days, "Gezielt üben" (the zones), and the routine of today as a card for the start page.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -8,8 +8,9 @@ import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { LENGTH_LABEL, scaledDuration, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineLength } from '@/lib/routine';
+import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
-import { Card, Txt } from './ui';
+import { Card, Section, Txt } from './ui';
 
 const LENGTHS: RoutineLength[] = ['short', 'normal', 'long'];
 const WEEKDAY = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
@@ -61,6 +62,59 @@ export function LengthPicker({ value, onChange, totalFor }: { value: RoutineLeng
         );
       })}
     </View>
+  );
+}
+
+/** The minutes of a zone session. */
+export function MinutesPicker({ value, options, onChange }: { value: number; options: readonly number[]; onChange: (minutes: number) => void }) {
+  const p = usePalette();
+  return (
+    <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', backgroundColor: p.surface, borderRadius: radius.l, padding: 4, gap: 4 }}>
+      {options.map((m) => {
+        const on = m === value;
+        return (
+          <Pressable
+            key={m}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            onPress={() => onChange(m)}
+            style={{ flex: 1, alignItems: 'center', paddingVertical: space.m, borderRadius: radius.m, backgroundColor: on ? p.accent : 'transparent' }}
+          >
+            <Txt variant="heading" color={on ? p.onAccent : p.text}>{m} Min.</Txt>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** "Gezielt üben": one tile per zone with videos the member may open; nothing when there is none. */
+export function ZonesSection() {
+  const p = usePalette();
+  const q = useZones();
+  const zones = q.data ?? [];
+  if (zones.length === 0) return null;
+  return (
+    <Section title="Gezielt üben">
+      <Txt muted>Wenig Zeit? Nimm dir nur einen Bereich vor.</Txt>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
+        {zones.map((z) => (
+          <Pressable
+            key={z.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${z.name}, ${plural(z.exercises.length, 'Übung', 'Übungen')}`}
+            onPress={() => router.push({ pathname: '/routine/zone', params: { id: z.id } } as unknown as Href)}
+            style={({ pressed }) => ({
+              flexGrow: 1, flexBasis: '45%', minHeight: 72, justifyContent: 'center', gap: 2, padding: space.m, borderRadius: radius.l, borderWidth: 1,
+              borderColor: p.line, backgroundColor: p.surface, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }],
+            })}
+          >
+            <Txt variant="heading" numberOfLines={1}>{z.name}</Txt>
+            <Txt variant="small" muted>{plural(z.exercises.length, 'Übung', 'Übungen')}</Txt>
+          </Pressable>
+        ))}
+      </View>
+    </Section>
   );
 }
 

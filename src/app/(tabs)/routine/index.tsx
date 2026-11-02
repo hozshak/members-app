@@ -1,6 +1,6 @@
 // Routine overview, the most important first: today's routine with the big start button, today's progress and this week
 // at a glance; the exercises to tick off (all ticked = day done); the member's own goal ("Mein Ziel" with a progress bar
-// and a forecast); a challenge when the coach made the routine one ("Tag 12 von 30"); the streak with the last five weeks
+// and a forecast); "Gezielt üben" (short sessions by zone); a challenge when the coach made the routine one ("Tag 12 von 30"); the streak with the last five weeks
 // and a share picture, the badges, the progress photos (optionally behind Face ID) and the reminders. The length is chosen
 // on the start screen of the routine. Several routines follow as small cards; streak and badges belong to the first.
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShareCard } from '@/components/share-card';
-import { openRoutine, ProgressRing, routineSeconds, WeekStrip } from '@/components/routine-parts';
+import { openRoutine, ProgressRing, routineSeconds, WeekStrip, ZonesSection } from '@/components/routine-parts';
 import { Button, Card, ErrorView, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
@@ -425,15 +425,19 @@ export default function RoutineScreen() {
       </View>
 
       {!main ? (
-        <Card style={{ padding: space.xl, gap: space.s }}>
-          <Ionicons name="flame-outline" size={32} color={p.accent} />
-          <Txt variant="title">Noch keine Routine</Txt>
-          <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier – mit Timer, Erinnerung und deiner Serie.</Txt>
-        </Card>
+        <>
+          <Card style={{ padding: space.xl, gap: space.s }}>
+            <Ionicons name="flame-outline" size={32} color={p.accent} />
+            <Txt variant="title">Noch keine Routine</Txt>
+            <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier – mit Timer, Erinnerung und deiner Serie.</Txt>
+          </Card>
+          <ZonesSection />
+        </>
       ) : (
         <>
           <TodayHero routine={main} />
           <TodayChecklist routine={main} />
+          <ZonesSection />
           <GoalCard routine={main} />
           <ChallengeBlock routine={main} />
           {q.data.length > 1 ? (

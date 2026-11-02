@@ -3,9 +3,11 @@
 // and Profil. Each tab has its own stack, so headers and "back" work inside it.
 import { NativeTabs } from 'expo-router/native-tabs';
 import { usePalette } from '@/lib/theme';
+import { useRoutineWidgetSync } from '@/lib/widget-sync';
 
 export default function TabsLayout() {
   const p = usePalette();
+  useRoutineWidgetSync();
   return (
     <NativeTabs tintColor={p.accent} backgroundColor={p.surface} labelStyle={{ selected: { color: p.accent } }}>
       <NativeTabs.Trigger name="(start)">

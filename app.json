@@ -64,7 +64,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Damit du ein Profilfoto aus deinen Fotos auswählen kannst.",
-          "cameraPermission": "Für deine Fortschrittsfotos braucht die App die Frontkamera."
+          "cameraPermission": "Für deine Fortschrittsfotos braucht die App die Frontkamera.",
+          "microphonePermission": false
         }
       ],
       [
@@ -86,6 +87,30 @@
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "RoutineWidget",
+              "displayName": "Routine",
+              "description": "Deine Serie und die Routine von heute.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium"],
+                "initialLayout": "src/widgets/routine-widget.ios.tsx"
+              },
+              "android": {
+                "targetCellWidth": 2,
+                "targetCellHeight": 2,
+                "minWidth": 110,
+                "minHeight": 110,
+                "initialLayout": "src/widgets/routine-widget.android.tsx"
+              }
+            }
+          ]
         }
       ]
     ],
