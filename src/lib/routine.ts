@@ -97,10 +97,10 @@ export function scaledDuration(sec: number, length: RoutineLength): number {
 export interface RoutinePrefs {
   /** Daily reminder at a fixed time. */
   reminder: boolean; hour: number; minute: number;
-  /** "Serie retten": in the evening, when the routine of the day is still open. */
-  rescue: boolean;
-  /** A photo reminder every Sunday morning. */
-  photoReminder: boolean;
+  /** "Serie retten": at this time, when the routine of the day is still open. */
+  rescue: boolean; rescueHour: number; rescueMinute: number;
+  /** A photo reminder once a week: weekday 1 = Sunday … 7 = Saturday. */
+  photoReminder: boolean; photoWeekday: number; photoHour: number; photoMinute: number;
   /** The progress photos need Face ID / the phone's code. */
   photoLock: boolean;
   /** In the routine: front camera as a mirror, small sounds, length. */
@@ -110,8 +110,20 @@ export interface RoutinePrefs {
 }
 const PREFS_KEY = 'members.routine';
 export const DEFAULT_PREFS: RoutinePrefs = {
-  reminder: false, hour: 8, minute: 0, rescue: false, photoReminder: false, photoLock: false, mirror: false, sound: true, length: 'normal', video: true, videoMuted: false,
+  reminder: false, hour: 8, minute: 0, rescue: false, rescueHour: 20, rescueMinute: 0, photoReminder: false, photoWeekday: 1, photoHour: 10, photoMinute: 0,
+  photoLock: false, mirror: false, sound: true, length: 'normal', video: true, videoMuted: false,
 };
+
+/** Weekdays in the order of the week, numbered as the reminders need them (1 = Sunday). */
+export const REMINDER_DAYS = [
+  { day: 2, short: 'Mo', long: 'montags' }, { day: 3, short: 'Di', long: 'dienstags' }, { day: 4, short: 'Mi', long: 'mittwochs' }, { day: 5, short: 'Do', long: 'donnerstags' },
+  { day: 6, short: 'Fr', long: 'freitags' }, { day: 7, short: 'Sa', long: 'samstags' }, { day: 1, short: 'So', long: 'sonntags' },
+] as const;
+
+/** 8, 5 → "08:05 Uhr". */
+export function clockTime(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} Uhr`;
+}
 
 export async function loadPrefs(): Promise<RoutinePrefs> {
   try {
@@ -159,7 +171,6 @@ const DAILY_ID = 'routine-daily';
 const PHOTO_ID = 'photo-weekly';
 const RESCUE_PREFIX = 'rescue-';
 const RESCUE_DAYS = 7;
-const RESCUE_HOUR = 20;
 
 /** Asks for the permission (Android: after creating the channel). False = not allowed. */
 export async function allowNotifications(): Promise<boolean> {
@@ -177,7 +188,7 @@ async function cancelPrefix(prefix: string): Promise<void> {
 
 /**
  * Brings the scheduled notifications in line with the settings: the daily reminder, the weekly photo reminder and
- * "Serie retten" for the next days at 20:00 (today's only while the routine of today is still open).
+ * "Serie retten" for the next days (today's only while the routine of today is still open).
  */
 export async function syncReminders(prefs: RoutinePrefs, routine: { title: string; stats: RoutineStats } | null): Promise<void> {
   if (Platform.OS === 'web') return;
@@ -198,14 +209,13 @@ export async function syncReminders(prefs: RoutinePrefs, routine: { title: strin
     await Notifications.scheduleNotificationAsync({
       identifier: PHOTO_ID,
       content: { title: 'Zeit für dein Fortschrittsfoto', body: 'Gleiches Licht, gleicher Abstand – in 10 Sekunden erledigt.' },
-      // weekday 1 = Sunday
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: 1, hour: 10, minute: 0, channelId: CHANNEL },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: prefs.photoWeekday, hour: prefs.photoHour, minute: prefs.photoMinute, channelId: CHANNEL },
     });
   }
   if (prefs.rescue && routine) {
     const now = new Date();
     for (let i = 0; i < RESCUE_DAYS; i++) {
-      const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, RESCUE_HOUR, 0, 0);
+      const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, prefs.rescueHour, prefs.rescueMinute, 0);
       if (at <= now) continue;
       if (i === 0 && routine.stats.doneToday) continue;
       const streak = i === 0 ? routine.stats.streak : 0;

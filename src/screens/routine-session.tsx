@@ -4,8 +4,10 @@
 // With mirror and video on both stand side by side in the same size (a landscape video above the mirror) and the countdown
 // sits on the seam; each picture can be enlarged (the other one becomes a small picture in the corner) and made small
 // again. The video loops from the start and pauses with the countdown; while it waits for data (slow internet) it says so
-// and the countdown waits too, at most HOLD_MAX_MS, so a bad connection never blocks the routine. After the last exercise
-// the day is marked done, the streak and new badges are shown, and the success can be shared.
+// and the countdown waits too, at most HOLD_MAX_MS, so a bad connection never blocks the routine. Videos load ahead so that
+// they do not hang when their turn comes: the first one already under the start screen, the next one hidden behind the
+// running one (only as far as the software allows two streams, see `canPreload`). After the last exercise the day is marked
+// done, the streak and new badges are shown, and the success can be shared.
 // `practice` (a session of a zone, "Gezielt üben"): the same run with the minutes instead of the length; it ticks nothing and
 // does not count for the streak.
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +30,7 @@ import {
 } from '@/lib/routine';
 import { playTone, prepareTones } from '@/lib/sounds';
 import { radius, space, usePalette } from '@/lib/theme';
+import type { PlayResponse } from '@/lib/types';
 
 /** Shape of an exercise video until it is loaded (most are filmed upright on a phone). */
 const PORTRAIT = 9 / 16;
@@ -145,6 +148,10 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const [videoAspect, setVideoAspect] = useState(PORTRAIT);
   const [waiting, setWaiting] = useState(false);
   const [holdOver, setHoldOver] = useState(false);
+  // with "one stream per member" (exclusive) a second video would end the running one, so it waits for the server's answer
+  const [canPreload, setCanPreload] = useState(false);
+  // the running video has its data: now the next one may load
+  const [preloadNext, setPreloadNext] = useState(false);
   const [finished, setFinished] = useState<RoutineStats | null>(null);
   const [practiceDone, setPracticeDone] = useState(false);
   const [earned, setEarned] = useState<Badge[]>([]);
@@ -152,7 +159,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const endsAt = useRef(0);
   const lastTick = useRef('');
   const step = routine.steps[index];
-  const mirror = prefs.mirror && !!camPerm?.granted && Platform.OS !== 'web';
+  const next = routine.steps[index + 1];
+  // (not under the start screen: the camera only runs when it is needed)
+  const mirror = prefs.mirror && !!camPerm?.granted && Platform.OS !== 'web' && phase !== 'ready';
   const video = !!(step?.videoId && step.videoAvailable) && prefs.video;
   // the countdown waits while the video waits for data (at most HOLD_MAX_MS)
   const held = video && waiting && !holdOver;
@@ -161,8 +170,12 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
 
   const onWaiting = useCallback((w: boolean) => {
     setWaiting(w);
-    if (!w) setHoldOver(false);
+    if (!w) {
+      setHoldOver(false);
+      setPreloadNext(true);
+    }
   }, []);
+  const onPlay = useCallback((play: PlayResponse) => setCanPreload(!play.exclusive), []);
 
   useEffect(() => {
     prepareTones();
@@ -183,8 +196,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     setIndex(next);
     setRemaining(durations[next] ?? s.durationSec);
     endsAt.current = Date.now() + (durations[next] ?? s.durationSec) * 1000;
-    setVideoAspect(PORTRAIT);
     setHoldOver(false);
+    setPreloadNext(false);
     buzz('step');
     playTone('step', prefs.sound);
   };
@@ -285,11 +298,10 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     </View>
   );
 
-  // ---------- start screen ----------
-  if (phase === 'ready') {
-    const totalFor = (l: typeof prefs.length) => routineSeconds(routine, l);
-    return (
-      <View style={{ flex: 1, backgroundColor: p.bg }}>
+  // ---------- start screen (lies over the run: the first video already loads underneath) ----------
+  const totalFor = (l: typeof prefs.length) => routineSeconds(routine, l);
+  const startScreen = phase === 'ready' ? (
+      <View style={[StyleSheet.absoluteFill, { zIndex: 10, backgroundColor: p.bg }]}>
         <Screen contentStyle={{ paddingTop: insets.top + space.m, gap: space.xl, paddingBottom: 120 + insets.bottom }}>
           <Pressable accessibilityRole="button" accessibilityLabel="Zurück zur Übersicht" hitSlop={12} onPress={() => router.back()} style={{ alignSelf: 'flex-start' }}>
             <Ionicons name="close" size={28} color={p.text} />
@@ -336,8 +348,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           <Button label="Los geht’s" onPress={begin} />
         </View>
       </View>
-    );
-  }
+  ) : null;
 
   // ---------- done ----------
   if (practiceDone) {
@@ -388,12 +399,11 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
       </Screen>
     );
   }
-  if (!step) return null;
+  if (!step) return startScreen;
 
   // ---------- one exercise ----------
   const dur = durations[index] ?? step.durationSec;
   const share = dur > 0 ? remaining / dur : 0;
-  const next = routine.steps[index + 1];
   const status = phase === 'run' && !running ? 'Pausiert' : held ? 'Video lädt' : null;
   const time = (big: boolean) => (
     <View style={{ alignItems: 'center' }}>
@@ -414,21 +424,36 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const layout = stageLayout({ width, screenH, videoAspect, video, mirror, focus });
   const both = video && mirror;
   const toggle = (kind: 'video' | 'mirror') => setFocus((f) => (f === kind ? 'both' : kind));
+  // the running video and the next one, loading hidden behind it: the same key keeps it (and what it has loaded) at its turn
+  const players = [step, ...(canPreload && preloadNext && next?.videoId && next.videoAvailable ? [next] : [])];
   const stage = video || mirror ? (
     <View style={{ width, height: layout.height, marginBottom: both ? BADGE / 2 - space.s : 0 }}>
       {layout.video ? (
         <Pane key="video" rect={layout.video} label="Vormachen" pip={layout.pip === 'video'} expanded={focus === 'video'} onExpand={() => toggle('video')}>
-          <LessonPlayer
-            key={step.id}
-            variant="coach"
-            mini={layout.pip === 'video'}
-            playing={phase === 'run' && running}
-            onAspect={setVideoAspect}
-            onWaiting={onWaiting}
-            muted={prefs.videoMuted}
-            onToggleMuted={() => update({ videoMuted: !prefs.videoMuted })}
-            playPath={`/api/member/videos/${encodeURIComponent(step.videoId ?? '')}/play`}
-          />
+          {players.map((s) => {
+            const active = s.id === step.id;
+            return (
+              <View
+                key={s.id}
+                pointerEvents={active ? 'auto' : 'none'}
+                accessibilityElementsHidden={!active}
+                importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
+                style={[StyleSheet.absoluteFill, active ? { zIndex: 1 } : { opacity: 0 }]}
+              >
+                <LessonPlayer
+                  variant="coach"
+                  mini={layout.pip === 'video'}
+                  playing={active && phase === 'run' && running}
+                  onAspect={active ? setVideoAspect : undefined}
+                  onWaiting={active ? onWaiting : undefined}
+                  onPlay={active ? onPlay : undefined}
+                  muted={prefs.videoMuted}
+                  onToggleMuted={() => update({ videoMuted: !prefs.videoMuted })}
+                  playPath={`/api/member/videos/${encodeURIComponent(s.videoId ?? '')}/play`}
+                />
+              </View>
+            );
+          })}
         </Pane>
       ) : null}
       {layout.mirror ? (
@@ -448,6 +473,11 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={phase === 'ready'}
+        importantForAccessibility={phase === 'ready' ? 'no-hide-descendants' : 'auto'}
+      >
       <Screen contentStyle={{ paddingTop: insets.top + space.m, gap: space.l }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
           <Pressable accessibilityRole="button" accessibilityLabel={practice ? 'Übung beenden' : 'Routine beenden'} hitSlop={12} onPress={() => router.back()}>
@@ -487,6 +517,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
 
         {step.description ? <Txt>{step.description}</Txt> : null}
       </Screen>
+      </View>
+
+      {startScreen}
 
       {phase === 'count' ? (
         <View accessibilityLiveRegion="assertive" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: p.bg, gap: space.m }]}>

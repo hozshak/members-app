@@ -3,7 +3,7 @@
 // announced after "erledigt".
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Comments } from '@/components/comments';
 import { DownloadRow } from '@/components/download';
@@ -19,38 +19,69 @@ import { useApi } from '@/lib/session';
 import { space, usePalette } from '@/lib/theme';
 import type { LessonDoneResult, LikeState, VideoDetail } from '@/lib/types';
 
+/** Share of the video that has to be watched before "erledigt" (the same rule as on the server). */
+const DONE_AT = 0.9;
+/** A longer step of the player is a jump, not watching (like on the website: WATCH_STEP_MAX_SEC). */
+const WATCH_STEP_MAX_SEC = 3;
+/** The button opens this much after the 90 %, so the server's own count has certainly arrived there as well. */
+const DONE_MARGIN_SEC = 1;
+
 export default function LessonScreen() {
-  const p = usePalette();
   const { id } = useLocalSearchParams<{ id: string }>();
   const q = useVideo(id);
-  const open = useOpen();
-  const done = useMarkDone(id);
-  const [result, setResult] = useState<LessonDoneResult | null>(null);
-
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
-  const v = q.data;
+  return <Lesson key={q.data.id} v={q.data} refetch={() => void q.refetch()} />;
+}
+
+function Lesson({ v, refetch }: { v: VideoDetail; refetch: () => void }) {
+  const p = usePalette();
+  const api = useApi();
+  const open = useOpen();
+  const done = useMarkDone(v.id);
+  const [result, setResult] = useState<LessonDoneResult | null>(null);
   const hasVideo = v.kind === 'video' || v.kind === 'video_text';
-  const isDone = v.done || v.completed;
+  const playPath = `/api/member/videos/${encodeURIComponent(v.id)}/play`;
+  const progressPath = `/api/member/videos/${encodeURIComponent(v.id)}/progress`;
+  const serverEnough = !!v.durationSec && v.watchedSec >= v.durationSec * DONE_AT;
+
+  // The 90 % while the video runs: counts watched seconds like the server (small forward steps, never a jump), so the
+  // button opens at that moment and not only on the next visit.
+  const live = useRef({ played: v.watchedSec, last: -1, pos: 0, dur: v.durationSec ?? 0, enough: false });
+  const [liveEnough, setLiveEnough] = useState(false);
+  const report = useCallback(
+    () => api.put(progressPath, { positionSec: live.current.pos, durationSec: live.current.dur }),
+    [api, progressPath],
+  );
+  const onTime = useCallback((pos: number, dur: number) => {
+    const l = live.current;
+    const step = pos - l.last;
+    if (l.last >= 0 && step > 0 && step <= WATCH_STEP_MAX_SEC) l.played += step;
+    l.last = pos;
+    l.pos = pos;
+    if (!l.dur && dur > 0) l.dur = dur;
+    if (!l.enough && l.dur > 0 && l.played >= l.dur * DONE_AT + DONE_MARGIN_SEC) {
+      l.enough = true;
+      setLiveEnough(true);
+      report().catch(() => undefined);
+    }
+  }, [report]);
+
   // like on the website: a video counts as done after 90 % actually watched (the server checks it too)
-  const mustWatch = hasVideo && !isDone && !!v.durationSec && v.watchedSec < v.durationSec * 0.9;
+  const mustWatch = hasVideo && !v.done && !!v.durationSec && !serverEnough && !liveEnough;
   const go = (to: string | null) => to && open.lesson(to, { replace: true });
 
   const toggleDone = () => {
+    if (done.isPending) return;
     setResult(null);
-    done.mutate(!isDone, { onSuccess: (r) => setResult(r) });
+    done.mutate({ done: !v.done, flush: !v.done && liveEnough && !serverEnough ? report : undefined }, { onSuccess: (r) => setResult(r) });
   };
 
   return (
     <Screen>
       <Stack.Screen options={{ title: v.sectionTitle ?? v.categoryTitle }} />
       {hasVideo ? (
-        <LessonPlayer
-          key={v.id}
-          playPath={`/api/member/videos/${encodeURIComponent(v.id)}/play`}
-          progressPath={`/api/member/videos/${encodeURIComponent(v.id)}/progress`}
-          onCompleted={() => void q.refetch()}
-        />
+        <LessonPlayer autoPlay playPath={playPath} progressPath={progressPath} onTime={onTime} onCompleted={refetch} />
       ) : null}
 
       <View style={{ gap: space.xs }}>
@@ -68,14 +99,13 @@ export default function LessonScreen() {
       </View>
 
       {v.bodyMd ? <LessonText lessonId={v.id} bodyMd={v.bodyMd} embeds={v.embeds} /> : null}
-      {v.file ? <DownloadRow file={v.file} onOpened={() => void q.refetch()} /> : null}
+      {v.file ? <DownloadRow file={v.file} onOpened={refetch} /> : null}
 
       <View style={{ gap: space.s }}>
         <Button
-          label={isDone ? 'Erledigt – zurücknehmen' : 'Als erledigt markieren'}
-          kind={isDone ? 'secondary' : 'primary'}
+          label={v.done ? 'Erledigt – zurücknehmen' : 'Als erledigt markieren'}
+          kind={v.done ? 'secondary' : 'primary'}
           onPress={toggleDone}
-          loading={done.isPending}
           disabled={mustWatch}
         />
         {mustWatch ? <Txt variant="small" muted style={{ textAlign: 'center' }}>Schau das Video zu 90 % an, dann kannst du es als erledigt markieren.</Txt> : null}

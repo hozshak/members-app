@@ -1,7 +1,12 @@
 // The one fetch wrapper for the member area API of a community. Every request says it comes from the app
 // (`X-Client: members-app`, `X-Requested-With: fetch`) and carries the session token as Bearer — the software accepts
 // that instead of a browser cookie (worker/core/lib/app-client.ts). No cookies are sent (credentials: 'omit').
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 import type { ApiErrorBody } from './types';
+
+/** Names this phone in the member's list of devices (the software keeps only the short label, worker/core/lib/ua.ts). */
+const USER_AGENT = Platform.OS === 'web' ? null : `Members-App (${(Device.modelName ?? Platform.OS).replace(/[^\w .,+-]/g, '').slice(0, 40)})`;
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message?: string, readonly fields: Record<string, string> = {}) {
@@ -42,6 +47,7 @@ export function normalizeBaseUrl(input: string): string | null {
 export function createApi(baseUrl: string, getToken: () => string | null, onUnauthorized: () => void): ApiClient {
   const headers = (json: boolean): Record<string, string> => {
     const h: Record<string, string> = { Accept: 'application/json', 'X-Client': 'members-app', 'X-Requested-With': 'fetch' };
+    if (USER_AGENT) h['User-Agent'] = USER_AGENT;
     const token = getToken();
     if (token) h.Authorization = `Bearer ${token}`;
     if (json) h['Content-Type'] = 'application/json';

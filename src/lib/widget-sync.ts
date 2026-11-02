@@ -21,6 +21,7 @@ export function useRoutineWidgetSync(): void {
     sendRoutineToWidget({
       title: routine.title, streak: routine.stats.streak, doneToday: routine.stats.doneToday, days: routine.stats.days,
       seconds: routine.steps.reduce((sum, s) => sum + scaledDuration(s.durationSec, prefs.length), 0), accent: accent ?? '#BD9553',
+      riskHour: prefs.rescueHour, riskMinute: prefs.rescueMinute,
     });
-  }, [accent, loaded, prefs.length, routine]);
+  }, [accent, loaded, prefs.length, prefs.rescueHour, prefs.rescueMinute, routine]);
 }

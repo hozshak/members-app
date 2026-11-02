@@ -85,7 +85,8 @@ const KIND_LABEL: Record<VideoCard['kind'], string> = { video: 'Video', video_te
 export function LessonRow({ video, index }: { video: VideoCard; index: number }) {
   const p = usePalette();
   const open = useOpen();
-  const finished = video.done || video.completed;
+  // only the member's own "erledigt" (like on the website): watching 90 % alone sets `completed`, not this
+  const finished = video.done;
   return (
     <Card
       onPress={video.locked ? undefined : () => open.lesson(video.id)}

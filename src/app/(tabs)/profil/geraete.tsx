@@ -1,6 +1,7 @@
 // Devices: every place the member is logged in (this phone first), with "Abmelden" per device and "Alle anderen
 // abmelden". Ending another device needs the password once more (the software asks for it — "sudo" for 10 minutes).
 import { useQueryClient } from '@tanstack/react-query';
+import * as Device from 'expo-device';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
 import { Button, Card, ErrorView, Field, Loading, Screen, Txt } from '@/components/ui';
@@ -84,7 +85,8 @@ export default function DevicesScreen() {
         {sessions.map((s) => (
           <Card key={s.id} style={{ padding: space.l, gap: space.xs }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
-              <Txt variant="heading" style={{ flex: 1 }}>{s.uaLabel || 'Unbekanntes Gerät'}</Txt>
+              {/* this phone knows its own name, also when the login happened before the software could read it */}
+              <Txt variant="heading" style={{ flex: 1 }}>{(s.current && Device.modelName) || s.uaLabel || 'Unbekanntes Gerät'}</Txt>
               {s.current ? <Txt variant="caption" color={p.accent}>Dieses Gerät</Txt> : null}
             </View>
             <Txt variant="small" muted>Zuletzt aktiv {when(s.lastSeenAt)} · angemeldet seit {when(s.createdAt)}</Txt>

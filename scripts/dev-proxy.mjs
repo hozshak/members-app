@@ -16,7 +16,16 @@ const toBackend = (url) => url.startsWith('/api/') || url.startsWith('/media/');
 const server = http.createServer((req, res) => {
   const target = toBackend(req.url ?? '/') ? BACKEND : EXPO;
   const headers = { ...req.headers, host: target.host };
-  if (target === BACKEND) for (const h of DROP_TO_BACKEND) delete headers[h];
+  if (target === BACKEND) {
+    // the browser's <video> cannot send the app's headers: with a cookie `dev_media_token` the proxy adds them (videos then
+    // really play in the browser; set it once with the token of the test member)
+    const media = (req.url ?? '').startsWith('/media/') && /(?:^|;\s*)dev_media_token=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
+    if (media) {
+      headers.authorization = `Bearer ${media}`;
+      headers['x-client'] = 'members-app';
+    }
+    for (const h of DROP_TO_BACKEND) delete headers[h];
+  }
   const out = http.request({ host: target.hostname, port: target.port, path: req.url, method: req.method, headers }, (up) => {
     res.writeHead(up.statusCode ?? 502, up.headers);
     up.pipe(res);

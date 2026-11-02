@@ -1,7 +1,10 @@
 // Colours of the app: a calm warm neutral in light and dark, plus the accent colour of the community (from its
 // branding) for buttons, progress and the active tab. Text on the accent is black or white, whichever reads better.
 import { useColorScheme } from 'react-native';
+import { onColor } from './color';
 import { useSession } from './session';
+
+export { onColor };
 
 export interface Palette {
   scheme: 'light' | 'dark';
@@ -20,17 +23,6 @@ export interface Palette {
 
 const LIGHT = { bg: '#F6F4F1', surface: '#FFFFFF', surfaceAlt: '#EFEBE6', text: '#1C1A18', textMuted: '#6B655F', line: '#E3DED7', success: '#2F7D4F', danger: '#B42318' };
 const DARK = { bg: '#121110', surface: '#1C1A18', surfaceAlt: '#272421', text: '#F3F0EB', textMuted: '#A39C94', line: '#302C28', success: '#5CC08A', danger: '#F97066' };
-
-function luminance(hex: string): number {
-  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * (ch[0] ?? 0) + 0.7152 * (ch[1] ?? 0) + 0.0722 * (ch[2] ?? 0);
-}
-
-/** Black or white, whichever has more contrast on `hex`. */
-export function onColor(hex: string): string {
-  const l = luminance(hex);
-  return (1.05) / (l + 0.05) >= (l + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
-}
 
 export function usePalette(): Palette {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';

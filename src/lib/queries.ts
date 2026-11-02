@@ -52,11 +52,25 @@ export function usePlayApi() {
   };
 }
 
+/** `flush`: what has to reach the server before it decides (the report of the player that passes the 90 %). */
 export function useMarkDone(videoId: string) {
   const api = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (done: boolean) => api.put<LessonDoneResult>(`/api/member/videos/${enc(videoId)}/done`, { done }),
+    mutationFn: async ({ done, flush }: { done: boolean; flush?: () => Promise<unknown> }) => {
+      await flush?.();
+      return api.put<LessonDoneResult>(`/api/member/videos/${enc(videoId)}/done`, { done });
+    },
+    // the button answers at once, in both directions; an error puts it back
+    onMutate: async ({ done }) => {
+      await qc.cancelQueries({ queryKey: keys.video(videoId) });
+      const before = qc.getQueryData<VideoDetail>(keys.video(videoId));
+      if (before) qc.setQueryData<VideoDetail>(keys.video(videoId), { ...before, done });
+      return { before };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.before) qc.setQueryData(keys.video(videoId), context.before);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.video(videoId) });
       void qc.invalidateQueries({ queryKey: ['category'] });

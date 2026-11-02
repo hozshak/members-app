@@ -8,11 +8,14 @@
 // While the video has to wait for data it says so ("Internet langsam – Video lädt …" after a moment). A lesson video can be
 // enlarged to the whole screen and back, also with a watermark (the watermark stays on the picture).
 // "Neu laden" gets a new address and goes on at the same place (a stuck stream, or another device took over the stream).
+// A lesson video starts by itself (`autoPlay`), pauses while another screen or tab is in front and goes on afterwards.
 // Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, plays exactly while
 // `playing` is true (the countdown of the exercise), has buttons for "10 seconds back", "Neu laden" and sound instead of
-// controls; the parent learns the video's shape (onAspect) and when it waits for data (onWaiting). A picture that stands
-// still although it should play counts as waiting, and a stuck video reloads by itself (at most twice per stall).
+// controls; the parent learns the video's shape (onAspect), when it waits for data (onWaiting) and the stream's rules (onPlay).
+// A picture that stands still although it should play counts as waiting, and a stuck or failed video reloads by itself (at
+// most twice per stall). The parent may keep it mounted hidden with `playing` false: it loads ahead and is ready at once.
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from 'expo-router';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -34,6 +37,10 @@ export interface LessonPlayerProps {
   /** Shape before the video is loaded (16:9); afterwards the video's own. */
   aspect?: number;
   onCompleted?: () => void;
+  /** Starts as soon as it is loaded (the lesson's own video; not a video embedded in the text). */
+  autoPlay?: boolean;
+  /** Every second while the position changes: position and length in seconds. */
+  onTime?: (positionSec: number, durationSec: number) => void;
   /** 'coach': fills the parent, no controls, loops from the start, follows `playing`. */
   variant?: 'lesson' | 'coach';
   /** coach: plays while true, pauses while false. */
@@ -42,6 +49,8 @@ export interface LessonPlayerProps {
   onAspect?: (aspect: number) => void;
   /** coach: true while the video waits for data (first load or slow internet). */
   onWaiting?: (waiting: boolean) => void;
+  /** The answer of the server to the play request (e.g. `exclusive`). */
+  onPlay?: (play: PlayResponse) => void;
   /** coach: a very small picture (no button, no text). */
   mini?: boolean;
   /** coach: without sound. */
@@ -72,15 +81,17 @@ function logVideo(what: string, detail?: string): void {
 }
 
 export function LessonPlayer({
-  playPath, progressPath, aspect = 16 / 9, onCompleted, variant = 'lesson', playing, onAspect, onWaiting, mini = false, muted = false, onToggleMuted,
+  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, onPlay, mini = false, muted = false, onToggleMuted,
 }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
   const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
   const player = useVideoPlayer(null, (p) => {
     p.loop = coach;
     // the small sounds of the routine play along instead of stopping the video
     if (coach) p.audioMixingMode = 'mixWithOthers';
+    else p.timeUpdateEventInterval = 1;
   });
   // lesson: the whole screen (only one picture at a time: the player moves over)
   const [large, setLarge] = useState(false);
@@ -94,6 +105,9 @@ export function LessonPlayer({
   const autoReloads = useRef(0);
   const savedAt = useRef(0);
   const completedSent = useRef(false);
+  const resumeOnFocus = useRef(false);
+  const autoStarted = useRef(false);
+  const seen = useRef({ pos: 0, dur: 0 });
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
   const { status } = useEvent(player, 'statusChange', { status: player.status });
   // the real shape of the video (width / height), known once its track is loaded
@@ -102,13 +116,23 @@ export function LessonPlayer({
   const takeSize = (size: { width: number; height: number } | undefined) => {
     if (!size || size.width <= 0 || size.height <= 0) return;
     setVideoAspect(size.width / size.height);
-    onAspect?.(size.width / size.height);
   };
   useEventListener(player, 'sourceLoad', ({ availableVideoTracks }) => takeSize(availableVideoTracks[0]?.size));
   useEventListener(player, 'videoTrackChange', ({ videoTrack }) => takeSize(videoTrack?.size));
   useEventListener(player, 'statusChange', (e) => {
     if (e.status === 'error') logVideo('Fehler', e.error?.message);
   });
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    seen.current = { pos: currentTime, dur: player.duration };
+    onTime?.(currentTime, player.duration);
+  });
+  // also when the parent starts to listen later (a hidden video that becomes the visible one)
+  useEffect(() => {
+    if (videoAspect) onAspect?.(videoAspect);
+  }, [onAspect, videoAspect]);
+  useEffect(() => {
+    if (play) onPlay?.(play);
+  }, [onPlay, play]);
 
   const attach = useCallback(async (resp: PlayResponse, at: number, autoplay: boolean) => {
     await player.replaceAsync({ uri: api.url(resp.src), headers: api.mediaHeaders() });
@@ -160,6 +184,25 @@ export function LessonPlayer({
     return () => { alive.current = false; };
   }, [api, playPath, attach, coach]);
 
+  // lesson: starts by itself as soon as there is something to play (once, and only with the lesson in front)
+  useEffect(() => {
+    if (!autoPlay || autoStarted.current || !loaded || status !== 'readyToPlay' || !focused) return;
+    autoStarted.current = true;
+    player.play();
+  }, [autoPlay, focused, loaded, player, status]);
+
+  // lesson: another screen or tab in front: pause, and go on when the lesson is back
+  useEffect(() => {
+    if (coach) return;
+    if (!focused) {
+      resumeOnFocus.current = player.playing;
+      player.pause();
+    } else if (resumeOnFocus.current) {
+      resumeOnFocus.current = false;
+      player.play();
+    }
+  }, [coach, focused, player]);
+
   // coach: the sound of the video
   useEffect(() => {
     if (coach) setMuted(player, muted);
@@ -206,32 +249,36 @@ export function LessonPlayer({
     return () => clearTimeout(t);
   }, [api, attach, isPlaying, play, playPath, player]);
 
-  const save = useCallback((completed = false) => {
+  const save = useCallback(async (completed = false) => {
     if (!progressPath) return;
-    const pos = player.currentTime;
-    const dur = player.duration;
+    // leaving the lesson: the player may already be released, then the last position seen counts
+    try {
+      seen.current = { pos: player.currentTime, dur: player.duration };
+    } catch { /* released */ }
+    const { pos, dur } = seen.current;
     if (!Number.isFinite(dur) || dur <= 0) return;
     if (!completed && Math.abs(pos - savedAt.current) < 1) return;
     savedAt.current = pos;
-    const body: ProgressUpdate = { positionSec: Math.floor(pos), durationSec: Math.round(dur), ...(completed ? { completed: true } : {}) };
-    api.put(progressPath, body).catch(() => undefined);
+    // the exact position: the server counts the watched seconds from these reports
+    const body: ProgressUpdate = { positionSec: pos, durationSec: Math.round(dur), ...(completed ? { completed: true } : {}) };
+    await api.put(progressPath, body).catch(() => undefined);
   }, [api, player, progressPath]);
 
   // progress while playing, on pause
   useEffect(() => {
     if (!isPlaying) {
-      save();
+      void save();
       return;
     }
-    const id = setInterval(() => save(), PROGRESS_EVERY_MS);
+    const id = setInterval(() => void save(), PROGRESS_EVERY_MS);
     return () => clearInterval(id);
   }, [isPlaying, save]);
 
   useEventListener(player, 'playToEnd', () => {
     if (completedSent.current) return;
     completedSent.current = true;
-    save(true);
-    onCompleted?.();
+    // the report first: the parent asks the server afterwards what counts now
+    void save(true).then(() => onCompleted?.());
   });
 
   // background: pause (and save)
@@ -243,7 +290,7 @@ export function LessonPlayer({
   }, [player]);
 
   // last position when leaving the lesson
-  useEffect(() => () => save(), [save]);
+  useEffect(() => () => void save(), [save]);
 
   // waiting for data: says so, after a moment also why
   const failed = !!error || status === 'error';
@@ -260,19 +307,21 @@ export function LessonPlayer({
   useEffect(() => {
     onWaiting?.(waiting);
   }, [onWaiting, waiting]);
-  // coach: stuck for a while: a new address by itself
+  // coach: stuck for a while or failed (e.g. the address ran out while it waited hidden), while it should play: a new
+  // address by itself. A video that is only loading ahead is left alone.
+  const stuck = coach && !!playing && (waiting || failed);
   useEffect(() => {
-    if (!waiting) {
+    if (!stuck) {
       autoReloads.current = 0;
       return;
     }
-    if (!coach || autoReloads.current >= AUTO_RELOADS) return;
+    if (autoReloads.current >= AUTO_RELOADS) return;
     const t = setTimeout(() => {
       autoReloads.current += 1;
-      void reload(`hängt seit ${AUTO_RELOAD_MS / 1000} s (Versuch ${autoReloads.current})`);
-    }, AUTO_RELOAD_MS);
+      void reload(`hängt (Versuch ${autoReloads.current})`);
+    }, failed ? 0 : AUTO_RELOAD_MS);
     return () => clearTimeout(t);
-  }, [coach, loaded, reload, waiting]);
+  }, [failed, loaded, reload, stuck]);
 
   const toggleLarge = () => {
     const wasPlaying = player.playing;
@@ -301,6 +350,8 @@ export function LessonPlayer({
           style={StyleSheet.absoluteFill}
           nativeControls={!coach}
           contentFit="contain"
+          // Android: a hidden video (loading ahead) really stays invisible only on a texture
+          surfaceType={coach ? 'textureView' : undefined}
           fullscreenOptions={{ enable: !wm?.enabled }}
           allowsPictureInPicture={false}
         />

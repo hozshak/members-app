@@ -8,20 +8,20 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Platform, Pressable, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShareCard } from '@/components/share-card';
 import { openRoutine, ProgressRing, routineSeconds, WeekStrip, ZonesSection } from '@/components/routine-parts';
-import { Button, Card, ErrorView, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
+import { Button, Card, ErrorView, Field, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import {
-  allowNotifications, badgesOf, cancelTodaysRescue, listPhotos, newBadges, scaledDuration, syncReminders, useChallenge, useCheckIn,
+  allowNotifications, badgesOf, cancelTodaysRescue, clockTime, listPhotos, newBadges, REMINDER_DAYS, scaledDuration, syncReminders, useChallenge, useCheckIn,
   useRoutinePrefs, useRoutines,
-  type MemberRoutine, type ProgressPhoto,
+  type MemberRoutine, type ProgressPhoto, type RoutinePrefs,
 } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
@@ -307,50 +307,207 @@ function BadgesCard({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-function RemindersCard({ routine }: { routine: MemberRoutine | null }) {
+/** The time as a wheel in the popup (iPhone), behind the phone's own clock dialog (Android) or as text (browser preview). */
+function TimeField({ hour, minute, onChange }: { hour: number; minute: number; onChange: (hour: number, minute: number) => void }) {
   const p = usePalette();
-  const [prefs, update] = useRoutinePrefs();
-  const [showPicker, setShowPicker] = useState(false);
+  const [dialog, setDialog] = useState(false);
+  const [text, setText] = useState(clockTime(hour, minute).slice(0, 5));
+  const asDate = new Date();
+  asDate.setHours(hour, minute, 0, 0);
+  if (Platform.OS === 'web') {
+    return (
+      <Field
+        label="Uhrzeit"
+        value={text}
+        onChangeText={(v) => {
+          setText(v);
+          const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(v);
+          if (m) onChange(Number(m[1]), Number(m[2]));
+        }}
+      />
+    );
+  }
+  const picker = (
+    <DateTimePicker
+      value={asDate}
+      mode="time"
+      is24Hour
+      locale="de-DE"
+      themeVariant={p.scheme}
+      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+      style={{ alignSelf: 'stretch' }}
+      onChange={(event, date) => {
+        setDialog(false);
+        if (event.type === 'set' && date) onChange(date.getHours(), date.getMinutes());
+      }}
+    />
+  );
+  if (Platform.OS === 'ios') return picker;
+  return (
+    <>
+      <Pressable accessibilityRole="button" accessibilityLabel="Uhrzeit wählen" onPress={() => setDialog(true)} style={{ alignItems: 'center', paddingVertical: space.m, borderRadius: radius.m, backgroundColor: p.surfaceAlt }}>
+        <Txt variant="display" style={{ fontVariant: ['tabular-nums'] }}>{clockTime(hour, minute)}</Txt>
+      </Pressable>
+      {dialog ? picker : null}
+    </>
+  );
+}
 
-  const turnOn = async (patch: Parameters<typeof update>[0]) => {
+/** The popup of a reminder: its time (the photo also its day), saved only with "Speichern". */
+function ReminderPopup({ title, hint, hour, minute, weekday, onSave, onClose }: {
+  title: string; hint: string; hour: number; minute: number; weekday?: number;
+  onSave: (hour: number, minute: number, weekday: number | undefined) => void; onClose: () => void;
+}) {
+  const p = usePalette();
+  const [time, setTime] = useState({ hour, minute });
+  const [day, setDay] = useState(weekday);
+  return (
+    <Modal transparent visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, justifyContent: 'center', padding: space.l }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Schließen, ohne zu speichern" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+        <View accessibilityViewIsModal style={{ gap: space.m, padding: space.xl, borderRadius: radius.xl, backgroundColor: p.surface }}>
+          <View style={{ gap: 2 }}>
+            <Txt variant="title">{title}</Txt>
+            <Txt variant="small" muted>{hint}</Txt>
+          </View>
+          {day !== undefined ? (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 4 }}>
+              {REMINDER_DAYS.map((w) => {
+                const on = w.day === day;
+                return (
+                  <Pressable
+                    key={w.day}
+                    accessibilityRole="radio"
+                    accessibilityLabel={w.long}
+                    accessibilityState={{ selected: on }}
+                    onPress={() => setDay(w.day)}
+                    style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.m, backgroundColor: on ? p.accent : p.surfaceAlt }}
+                  >
+                    <Txt variant="small" color={on ? p.onAccent : p.text} style={{ fontWeight: '700' }}>{w.short}</Txt>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+          <TimeField hour={time.hour} minute={time.minute} onChange={(h, m) => setTime({ hour: h, minute: m })} />
+          <View style={{ flexDirection: 'row', gap: space.m }}>
+            <Button label="Abbrechen" kind="secondary" onPress={onClose} style={{ flex: 1, paddingHorizontal: space.m }} />
+            <Button label="Speichern" onPress={() => onSave(time.hour, time.minute, day)} style={{ flex: 1, paddingHorizontal: space.m }} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/** A reminder: the switch and, while it is on, its time; a tap on the time opens the popup. */
+function ReminderRow({ label, help, timeLabel, when, value, onToggle, onEdit }: {
+  label: string; help: string; timeLabel: string; when: string; value: boolean; onToggle: (v: boolean) => void; onEdit: () => void;
+}) {
+  const p = usePalette();
+  return (
+    <View style={{ backgroundColor: p.surface }}>
+      <ToggleRow label={label} help={help} value={value} onValueChange={onToggle} />
+      {value ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${when}, ändern`}
+          onPress={onEdit}
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s, minHeight: 44, paddingHorizontal: space.l, paddingBottom: space.m, opacity: pressed ? 0.6 : 1 })}
+        >
+          <Ionicons name="time-outline" size={18} color={p.accent} />
+          <Txt variant="small" muted style={{ flex: 1 }}>{timeLabel}</Txt>
+          <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{when}</Txt>
+          <Ionicons name="chevron-forward" size={16} color={p.accent} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function RemindersCard({ routine }: { routine: MemberRoutine | null }) {
+  const [prefs, update] = useRoutinePrefs();
+  const [editing, setEditing] = useState<'daily' | 'rescue' | 'photo' | null>(null);
+
+  const turnOn = async (patch: Partial<RoutinePrefs>, kind: NonNullable<typeof editing>) => {
     if (!(await allowNotifications())) {
       Alert.alert('Mitteilungen sind aus', 'Erlaube Mitteilungen für die App in den Einstellungen deines Handys, dann klappen die Erinnerungen.');
       return;
     }
     await syncReminders(update(patch), routine);
+    setEditing(kind);
   };
-  const set = (patch: Parameters<typeof update>[0], on: boolean) => {
-    if (on) void turnOn(patch);
-    else void syncReminders(update(patch), routine);
+  const off = (patch: Partial<RoutinePrefs>) => void syncReminders(update(patch), routine);
+  const save = (patch: Partial<RoutinePrefs>) => {
+    void syncReminders(update(patch), routine);
+    setEditing(null);
   };
-  const time = `${String(prefs.hour).padStart(2, '0')}:${String(prefs.minute).padStart(2, '0')} Uhr`;
-  const asDate = new Date();
-  asDate.setHours(prefs.hour, prefs.minute, 0, 0);
+  const photoDay = REMINDER_DAYS.find((w) => w.day === prefs.photoWeekday);
 
   return (
     <Section title="Erinnerungen">
       <MenuGroup>
-        {routine ? <ToggleRow label="Tägliche Erinnerung" help={prefs.reminder ? `Jeden Tag um ${time}` : 'Eine Mitteilung, wenn es Zeit für die Routine ist.'} value={prefs.reminder} onValueChange={(v) => set({ reminder: v }, v)} /> : null}
-        {routine && prefs.reminder ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Uhrzeit ändern" onPress={() => setShowPicker((s) => !s)} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.l, backgroundColor: p.surface }}>
-            <Ionicons name="time-outline" size={22} color={p.accent} />
-            <Txt variant="heading" style={{ flex: 1 }}>Uhrzeit</Txt>
-            <Txt color={p.accent} variant="heading">{time}</Txt>
-          </Pressable>
+        {routine ? (
+          <ReminderRow
+            label="Tägliche Erinnerung"
+            help="Eine Mitteilung, wenn es Zeit für die Routine ist."
+            timeLabel="Jeden Tag um"
+            when={clockTime(prefs.hour, prefs.minute)}
+            value={prefs.reminder}
+            onToggle={(v) => (v ? void turnOn({ reminder: true }, 'daily') : off({ reminder: false }))}
+            onEdit={() => setEditing('daily')}
+          />
         ) : null}
-        {routine ? <ToggleRow label="Serie retten" help="Um 20 Uhr, falls du die Routine heute noch nicht gemacht hast." value={prefs.rescue} onValueChange={(v) => set({ rescue: v }, v)} /> : null}
-        <ToggleRow label="Wöchentliches Foto" help="Sonntags um 10 Uhr eine Erinnerung an dein Fortschrittsfoto." value={prefs.photoReminder} onValueChange={(v) => set({ photoReminder: v }, v)} />
+        {routine ? (
+          <ReminderRow
+            label="Serie retten"
+            help="Nur falls du die Routine an dem Tag noch nicht gemacht hast."
+            timeLabel="Jeden Tag um"
+            when={clockTime(prefs.rescueHour, prefs.rescueMinute)}
+            value={prefs.rescue}
+            onToggle={(v) => (v ? void turnOn({ rescue: true }, 'rescue') : off({ rescue: false }))}
+            onEdit={() => setEditing('rescue')}
+          />
+        ) : null}
+        <ReminderRow
+          label="Wöchentliches Foto"
+          help="Eine Erinnerung an dein Fortschrittsfoto."
+          timeLabel={`Immer ${photoDay?.long ?? ''} um`}
+          when={clockTime(prefs.photoHour, prefs.photoMinute)}
+          value={prefs.photoReminder}
+          onToggle={(v) => (v ? void turnOn({ photoReminder: true }, 'photo') : off({ photoReminder: false }))}
+          onEdit={() => setEditing('photo')}
+        />
       </MenuGroup>
-      {showPicker && prefs.reminder && Platform.OS !== 'web' ? (
-        <DateTimePicker
-          value={asDate}
-          mode="time"
-          is24Hour
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event, date) => {
-            if (Platform.OS !== 'ios') setShowPicker(false);
-            if (event.type === 'set' && date) void syncReminders(update({ hour: date.getHours(), minute: date.getMinutes() }), routine);
-          }}
+      {editing === 'daily' ? (
+        <ReminderPopup
+          title="Tägliche Erinnerung"
+          hint="Wann ist Zeit für deine Routine?"
+          hour={prefs.hour}
+          minute={prefs.minute}
+          onSave={(hour, minute) => save({ hour, minute })}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+      {editing === 'rescue' ? (
+        <ReminderPopup
+          title="Serie retten"
+          hint="Wann sollen wir dich erinnern, wenn die Routine noch offen ist?"
+          hour={prefs.rescueHour}
+          minute={prefs.rescueMinute}
+          onSave={(rescueHour, rescueMinute) => save({ rescueHour, rescueMinute })}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+      {editing === 'photo' ? (
+        <ReminderPopup
+          title="Wöchentliches Foto"
+          hint="An welchem Tag und um wie viel Uhr?"
+          hour={prefs.photoHour}
+          minute={prefs.photoMinute}
+          weekday={prefs.photoWeekday}
+          onSave={(photoHour, photoMinute, photoWeekday) => save({ photoHour, photoMinute, photoWeekday: photoWeekday ?? prefs.photoWeekday })}
+          onClose={() => setEditing(null)}
         />
       ) : null}
     </Section>
