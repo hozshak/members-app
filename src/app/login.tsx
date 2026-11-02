@@ -1,5 +1,5 @@
 // Stage 2: log in to the chosen community with the same e-mail (or user name) and password as on the website.
-// "Passwort vergessen?" opens the community's own page in the browser; "Andere Community" goes back to stage 1.
+// "Passwort vergessen?" opens the community's own page in the browser; "Anderen Memberbereich wählen" goes back to stage 1.
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useRef, useState, type ComponentRef } from 'react';
@@ -91,7 +91,7 @@ export default function LoginScreen() {
             <Txt color={p.accent} variant="heading">Passwort vergessen?</Txt>
           </Pressable>
           <Pressable accessibilityRole="button" hitSlop={10} onPress={() => void forgetCommunity()}>
-            <Txt muted variant="small">Andere Community wählen</Txt>
+            <Txt muted variant="small">Anderen Memberbereich wählen</Txt>
           </Pressable>
         </View>
       </Screen>

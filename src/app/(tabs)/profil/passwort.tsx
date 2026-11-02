@@ -28,7 +28,7 @@ export default function ChangePasswordScreen() {
   if (me?.linkedAccount) {
     return (
       <Screen>
-        <Txt>Dein Passwort verwaltest du im Hauptbereich deiner Community. Melde dich dort auf der Website an, um es zu ändern.</Txt>
+        <Txt>Dein Passwort verwaltest du im Hauptbereich deines Memberbereichs. Melde dich dort auf der Website an, um es zu ändern.</Txt>
       </Screen>
     );
   }

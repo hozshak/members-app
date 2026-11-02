@@ -42,7 +42,7 @@ export default function CommunityScreen() {
             <Txt variant="caption" color={p.accent}>Members</Txt>
           </Pressable>
           <Txt variant="display">Wo bist du Mitglied?</Txt>
-          <Txt muted>Wähle deine Community. Danach meldest du dich mit derselben E-Mail und demselben Passwort an wie auf der Website.</Txt>
+          <Txt muted>Wähle deinen Memberbereich. Danach meldest du dich mit derselben E-Mail und demselben Passwort an wie auf der Website.</Txt>
         </View>
 
         <View style={{ gap: space.m }}>

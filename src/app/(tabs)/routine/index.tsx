@@ -1,9 +1,8 @@
-// Routine overview: the member's own goal ("Mein Ziel" with a progress bar, this week and a forecast), today's routine
-// (tick the exercises off one by one — all ticked = day done; length short / normal / long, start it with the timer),
-// a challenge when the
-// coach made the routine one ("Tag 12 von 30"), the streak (days in a row, best, total) with the last five weeks and a
-// share picture, the badges, the reminders (daily, "Serie retten" in the evening, weekly photo) and the progress photos
-// (optionally behind Face ID). Several routines are listed one below the other; streak and badges belong to the first.
+// Routine overview, the most important first: today's routine with the big start button, today's progress and this week
+// at a glance; the exercises to tick off (all ticked = day done); the member's own goal ("Mein Ziel" with a progress bar
+// and a forecast); a challenge when the coach made the routine one ("Tag 12 von 30"); the streak with the last five weeks
+// and a share picture, the badges, the progress photos (optionally behind Face ID) and the reminders. The length is chosen
+// on the start screen of the routine. Several routines follow as small cards; streak and badges belong to the first.
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect, type Href } from 'expo-router';
@@ -12,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShareCard } from '@/components/share-card';
+import { openRoutine, ProgressRing, routineSeconds, WeekStrip } from '@/components/routine-parts';
 import { Button, Card, ErrorView, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
@@ -19,15 +19,14 @@ import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import {
-  allowNotifications, badgesOf, cancelTodaysRescue, LENGTH_LABEL, listPhotos, newBadges, scaledDuration, syncReminders, useChallenge, useCheckIn,
+  allowNotifications, badgesOf, cancelTodaysRescue, listPhotos, newBadges, scaledDuration, syncReminders, useChallenge, useCheckIn,
   useRoutinePrefs, useRoutines,
-  type MemberRoutine, type ProgressPhoto, type RoutineLength,
+  type MemberRoutine, type ProgressPhoto,
 } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-const LENGTHS: RoutineLength[] = ['short', 'normal', 'long'];
 
 /** The last five weeks (Monday to Sunday) ending with this week, as YYYY-MM-DD; days after today are null. */
 function calendarWeeks(today = new Date()): (string | null)[][] {
@@ -50,8 +49,6 @@ function calendarWeeks(today = new Date()): (string | null)[][] {
   return weeks;
 }
 
-
-const WEEKDAY_SHORT = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
 
 /** "Mein Ziel": the goal in the member's words, a big bar (routine days done of those needed), this week as dots and a
  *  sentence that says how close it is ("Bleib dran: So erreichst du dein Ziel am 24. November."). */
@@ -93,25 +90,7 @@ function GoalCard({ routine }: { routine: MemberRoutine }) {
         </View>
       </View>
       <Txt variant="heading" color={g.reached ? p.success : p.text}>{g.message}</Txt>
-      <View style={{ gap: space.xs }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          {g.weekDays.map((d, i) => (
-            <View key={d.day} style={{ alignItems: 'center', gap: 4 }}>
-              <View
-                accessibilityLabel={`${d.day}${d.done ? ', erledigt' : ''}`}
-                style={{
-                  width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: d.done ? p.accent : d.future ? 'transparent' : p.surfaceAlt, borderWidth: d.future ? 1 : 0, borderColor: p.line,
-                }}
-              >
-                {d.done ? <Ionicons name="checkmark" size={18} color={p.onAccent} /> : null}
-              </View>
-              <Txt variant="small" muted>{WEEKDAY_SHORT[i]}</Txt>
-            </View>
-          ))}
-        </View>
-        <Txt variant="small" muted>Diese Woche: {g.weekDone} von {goal.perWeek} · Tag {g.dayOfGoal} von {goal.days}</Txt>
-      </View>
+      <Txt variant="small" muted>Diese Woche: {g.weekDone} von {goal.perWeek} · Tag {g.dayOfGoal} von {goal.days}</Txt>
     </Card>
   );
 }
@@ -147,11 +126,8 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
   };
 
   return (
-    <View style={{ gap: space.s }}>
-      <View style={{ gap: space.xs }}>
-        <ProgressBar value={ticked / Math.max(1, routine.steps.length)} />
-        <Txt variant="small" muted>{doneToday ? 'Heute alles erledigt' : `${ticked} von ${routine.steps.length} Übungen erledigt`}</Txt>
-      </View>
+    <Section title="Heute abhaken" action={<Txt variant="small" muted>{ticked} von {routine.steps.length}</Txt>}>
+      <View style={{ gap: space.s }}>
       {routine.steps.map((s, i) => {
         const on = doneToday || checks.isDone(s.id);
         return (
@@ -171,30 +147,8 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-function LengthPicker({ value, onChange, totalFor }: { value: RoutineLength; onChange: (l: RoutineLength) => void; totalFor: (l: RoutineLength) => number }) {
-  const p = usePalette();
-  return (
-    <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', backgroundColor: p.surface, borderRadius: radius.l, padding: 4, gap: 4 }}>
-      {LENGTHS.map((l) => {
-        const on = l === value;
-        return (
-          <Pressable
-            key={l}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            onPress={() => onChange(l)}
-            style={{ flex: 1, alignItems: 'center', paddingVertical: space.s, borderRadius: radius.m, backgroundColor: on ? p.accent : 'transparent' }}
-          >
-            <Txt variant="heading" color={on ? p.onAccent : p.text}>{LENGTH_LABEL[l]}</Txt>
-            <Txt variant="small" color={on ? p.onAccent : p.textMuted}>{minutes(totalFor(l))}</Txt>
-          </Pressable>
-        );
-      })}
-    </View>
+      </View>
+    </Section>
   );
 }
 
@@ -235,26 +189,43 @@ function ChallengeBlock({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-function RoutineCard({ routine, main }: { routine: MemberRoutine; main: boolean }) {
+/** Today's routine: what, how long, how far today, this week, and the way in. */
+function TodayHero({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
-  const [prefs, update] = useRoutinePrefs();
-  const totalFor = (l: RoutineLength) => routine.steps.reduce((sum, s) => sum + scaledDuration(s.durationSec, l), 0);
+  const [prefs] = useRoutinePrefs();
+  const checks = useDayChecks(routine.id);
+  const done = routine.stats.doneToday;
+  const total = routine.steps.length;
+  const ticked = done ? total : routine.steps.filter((s) => checks.isDone(s.id)).length;
   return (
-    <Card style={{ padding: space.l, gap: space.m, backgroundColor: main ? p.accentSoft : p.surface }}>
-      <View style={{ gap: space.xs }}>
-        <Txt variant="caption" color={p.accent}>{routine.stats.doneToday ? 'Heute erledigt' : 'Heute'}</Txt>
-        <Txt variant="title">{routine.title}</Txt>
-        <Txt muted>{plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(totalFor(prefs.length))}</Txt>
-        {routine.description ? <Txt variant="small" muted numberOfLines={3}>{routine.description}</Txt> : null}
+    <Card style={{ padding: space.l, gap: space.l, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
+        <View style={{ flex: 1, gap: space.xs }}>
+          <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : 'Heute dran'}</Txt>
+          <Txt variant="title">{routine.title}</Txt>
+          <Txt muted>{plural(total, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}</Txt>
+        </View>
+        <ProgressRing size={76} share={ticked / Math.max(1, total)} stroke={8} track={p.surface}>
+          {done ? <Ionicons name="checkmark" size={32} color={p.accent} /> : <Txt variant="heading" style={{ fontVariant: ['tabular-nums'] }}>{ticked}/{total}</Txt>}
+        </ProgressRing>
       </View>
-      <TodayChecklist routine={routine} />
-      <LengthPicker value={prefs.length} onChange={(length) => update({ length })} totalFor={totalFor} />
-      <ChallengeBlock routine={routine} />
-      <Button
-        label={routine.stats.doneToday ? 'Noch einmal mit Timer' : 'Mit Timer starten'}
-        kind={routine.stats.doneToday ? 'secondary' : 'primary'}
-        onPress={() => router.push(`/routine/${encodeURIComponent(routine.id)}` as Href)}
-      />
+      <WeekStrip days={routine.stats.days} />
+      <Button label={done ? 'Noch einmal machen' : 'Routine starten'} kind={done ? 'secondary' : 'primary'} onPress={() => openRoutine(routine.id)} />
+    </Card>
+  );
+}
+
+/** A further routine, small. */
+function OtherRoutine({ routine }: { routine: MemberRoutine }) {
+  const p = usePalette();
+  const [prefs] = useRoutinePrefs();
+  return (
+    <Card onPress={() => openRoutine(routine.id)} accessibilityLabel={`${routine.title} starten`} style={{ padding: space.l, flexDirection: 'row', alignItems: 'center', gap: space.m }}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
+        <Txt variant="small" muted>{routine.stats.doneToday ? 'Heute erledigt · ' : ''}{plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}</Txt>
+      </View>
+      <Ionicons name={routine.stats.doneToday ? 'checkmark-circle' : 'play-circle'} size={32} color={p.accent} />
     </Card>
   );
 }
@@ -443,18 +414,35 @@ export default function RoutineScreen() {
 
   return (
     <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
-      <Txt variant="display">Routine</Txt>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
+        <Txt variant="display">Routine</Txt>
+        {main && main.stats.streak > 0 ? (
+          <View accessibilityLabel={`${plural(main.stats.streak, 'Tag', 'Tage')} in Folge`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: p.accentSoft }}>
+            <Ionicons name="flame" size={18} color={p.accent} />
+            <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{main.stats.streak}</Txt>
+          </View>
+        ) : null}
+      </View>
 
       {!main ? (
         <Card style={{ padding: space.xl, gap: space.s }}>
           <Ionicons name="flame-outline" size={32} color={p.accent} />
           <Txt variant="title">Noch keine Routine</Txt>
-          <Txt muted>Sobald {community?.name ?? 'deine Community'} eine tägliche Routine für dich anlegt, findest du sie hier – mit Timer, Erinnerung und deiner Serie.</Txt>
+          <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier – mit Timer, Erinnerung und deiner Serie.</Txt>
         </Card>
       ) : (
         <>
+          <TodayHero routine={main} />
+          <TodayChecklist routine={main} />
           <GoalCard routine={main} />
-          {q.data.map((r) => <RoutineCard key={r.id} routine={r} main={r === main} />)}
+          <ChallengeBlock routine={main} />
+          {q.data.length > 1 ? (
+            <Section title="Weitere Routinen">
+              <View style={{ gap: space.m }}>
+                {q.data.slice(1).map((r) => <OtherRoutine key={r.id} routine={r} />)}
+              </View>
+            </Section>
+          ) : null}
           <Section title="Deine Serie">
             <StreakCard routine={main} />
           </Section>
@@ -462,8 +450,8 @@ export default function RoutineScreen() {
         </>
       )}
 
-      <RemindersCard routine={main} />
       <PhotosCard />
+      <RemindersCard routine={main} />
     </Screen>
   );
 }

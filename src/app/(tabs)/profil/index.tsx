@@ -92,7 +92,7 @@ export default function ProfileScreen() {
 
       <View style={{ gap: space.m }}>
         <Button label="Abmelden" kind="secondary" onPress={() => void logout()} />
-        <Button label="Andere Community wählen" kind="ghost" onPress={() => void forgetCommunity()} />
+        <Button label="Anderen Memberbereich wählen" kind="ghost" onPress={() => void forgetCommunity()} />
       </View>
     </Screen>
   );

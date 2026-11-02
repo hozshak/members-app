@@ -5,12 +5,17 @@
 // a watermark the native fullscreen is off (it would hide the watermark). The frame takes the shape of the video as soon
 // as it is loaded: a portrait (phone) video stands upright — at most 70 % of the screen height, centred — instead of a
 // small picture between black bars.
-// Variant "coach" (routine, next to the mirror): fills the frame of its parent, no controls, starts at 0 and loops, and
-// plays exactly while `playing` is true (the countdown of the exercise); the parent learns the video's shape (onAspect).
+// While the video has to wait for data it says so ("Internet langsam – Video lädt …" after a moment). A lesson video can be
+// enlarged to the whole screen and back, also with a watermark (the watermark stays on the picture).
+// Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, plays exactly while
+// `playing` is true (the countdown of the exercise), has a "10 seconds back" button instead of controls; the parent learns
+// the video's shape (onAspect) and when it waits for data (onWaiting).
+import { Ionicons } from '@expo/vector-icons';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, AppState, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorText } from '@/lib/api';
 import { useApi } from '@/lib/session';
 import { radius, space } from '@/lib/theme';
@@ -33,17 +38,31 @@ export interface LessonPlayerProps {
   playing?: boolean;
   /** The real shape (width / height) once the video is loaded. */
   onAspect?: (aspect: number) => void;
+  /** coach: true while the video waits for data (first load or slow internet). */
+  onWaiting?: (waiting: boolean) => void;
+  /** coach: a very small picture (no button, no text). */
+  mini?: boolean;
 }
+
+/** After this long without data the waiting indicator also says why. */
+const SLOW_AFTER_MS = 2500;
 
 /** Jumps to a position. expo-video's player is an imperative native object: seeking is assigning `currentTime`. */
 function seek(player: VideoPlayer, at: number): void {
   player.currentTime = at;
 }
 
-export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onCompleted, variant = 'lesson', playing, onAspect }: LessonPlayerProps) {
+export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onCompleted, variant = 'lesson', playing, onAspect, onWaiting, mini = false }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
-  const player = useVideoPlayer(null, (p) => { p.loop = coach; });
+  const insets = useSafeAreaInsets();
+  const player = useVideoPlayer(null, (p) => {
+    p.loop = coach;
+    // the small sounds of the routine play along instead of stopping the video
+    if (coach) p.audioMixingMode = 'mixWithOthers';
+  });
+  // lesson: the whole screen (only one picture at a time: the player moves over)
+  const [large, setLarge] = useState(false);
   // the source is attached (coach: only then `playing` can start it)
   const [loaded, setLoaded] = useState(false);
   const [play, setPlay] = useState<PlayResponse | null>(null);
@@ -153,24 +172,73 @@ export function LessonPlayer({ playPath, progressPath, aspect = 16 / 9, onComple
   // last position when leaving the lesson
   useEffect(() => () => save(), [save]);
 
+  // waiting for data: says so, after a moment also why
+  const failed = !!error || status === 'error';
+  const waiting = !failed && (!loaded || status === 'loading');
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setTimeout(() => setSlow(true), SLOW_AFTER_MS);
+    return () => {
+      clearTimeout(t);
+      setSlow(false);
+    };
+  }, [waiting]);
+  useEffect(() => {
+    onWaiting?.(waiting);
+  }, [onWaiting, waiting]);
+
+  const toggleLarge = () => {
+    const wasPlaying = player.playing;
+    setLarge((v) => !v);
+    if (wasPlaying) setTimeout(() => player.play(), 0);
+  };
+
   const wm = play?.watermark;
+  const waitingView = waiting ? (
+    <View style={[StyleSheet.absoluteFill, styles.center, { gap: space.s, padding: space.s, backgroundColor: slow ? 'rgba(0,0,0,0.45)' : 'transparent' }]} pointerEvents="none">
+      <ActivityIndicator color="#FFFFFF" />
+      {slow && !mini ? <Text style={styles.slow} accessibilityLiveRegion="polite">Internet langsam – Video lädt …</Text> : null}
+    </View>
+  ) : null;
   return (
     <View style={coach ? [StyleSheet.absoluteFill, { backgroundColor: '#000000' }] : [styles.frame, frameStyle(videoAspect ?? aspect, screenW, screenH), { borderRadius: radius.l }]}>
-      <VideoView
-        player={player}
-        style={StyleSheet.absoluteFill}
-        nativeControls={!coach}
-        contentFit="contain"
-        fullscreenOptions={{ enable: !wm?.enabled }}
-        allowsPictureInPicture={false}
-      />
+      {large ? null : (
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          nativeControls={!coach}
+          contentFit="contain"
+          fullscreenOptions={{ enable: !wm?.enabled }}
+          allowsPictureInPicture={false}
+        />
+      )}
       {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
-      {!play && !error ? (
-        <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
-          <ActivityIndicator color="#FFFFFF" />
-        </View>
+      {waitingView}
+      {coach && !mini && !failed ? (
+        <RoundIcon icon="play-back" label="10 Sekunden zurück" onPress={() => player.seekBy(-10)} style={{ position: 'absolute', left: space.s, bottom: space.s }} />
       ) : null}
-      {error || status === 'error' ? (
+      {!coach && !failed ? (
+        <RoundIcon icon="expand" label="Video vergrößern" onPress={toggleLarge} style={{ position: 'absolute', right: space.s, top: space.s }} />
+      ) : null}
+      {!coach ? (
+        <Modal visible={large} animationType="fade" onRequestClose={toggleLarge} statusBarTranslucent>
+          <View style={{ flex: 1, backgroundColor: '#000000' }}>
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              nativeControls
+              contentFit="contain"
+              fullscreenOptions={{ enable: false }}
+              allowsPictureInPicture={false}
+            />
+            {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
+            {waitingView}
+            <RoundIcon icon="contract" label="Video verkleinern" onPress={toggleLarge} style={{ position: 'absolute', right: space.l, top: insets.top + space.s }} />
+          </View>
+        </Modal>
+      ) : null}
+      {failed ? (
         <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: 'rgba(0,0,0,0.75)', padding: coach ? space.s : space.l, gap: space.m }]}>
           <Txt color="#FFFFFF" variant={coach ? 'small' : 'body'} style={{ textAlign: 'center' }}>{error ? errorText(error) : 'Das Video konnte nicht geladen werden.'}</Txt>
           <Button label="Noch einmal" kind="secondary" onPress={() => { setPlay(null); setLoaded(false); setError(null); setAttempt((a) => a + 1); }} />
@@ -186,6 +254,15 @@ function frameStyle(aspect: number, screenW: number, screenH: number) {
   const pageW = screenW - 2 * space.l;
   const height = Math.round(Math.min(screenH * 0.7, pageW / aspect));
   return { height, width: Math.round(height * aspect), alignSelf: 'center' as const };
+}
+
+/** A small round button on the picture. */
+function RoundIcon({ icon, label, onPress, style }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; style?: object }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={[styles.round, style]}>
+      <Ionicons name={icon} size={18} color="#FFFFFF" />
+    </Pressable>
+  );
 }
 
 /** The member's name/e-mail, moved to another corner every `intervalSec` (like on the website). */
@@ -209,4 +286,6 @@ function Watermark({ text, opacity, intervalSec }: { text: string; opacity: numb
 const styles = StyleSheet.create({
   frame: { maxWidth: '100%', backgroundColor: '#000000', overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
+  slow: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
 });

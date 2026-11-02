@@ -1,4 +1,4 @@
-// Home: greeting, the buttons of the start page (e.g. "WhatsApp-Gruppe", "Bewertung abgeben" — as on the website),
+// Home: greeting, today's routine (one tap to its start), the buttons of the start page (e.g. "WhatsApp-Gruppe", "Bewertung abgeben" — as on the website),
 // "Weiterschauen" (started videos), the member's programmes with their progress, then categories that are open for
 // everyone or unlocked by a tag. Teasers (things to buy) are left out — the app sells nothing.
 import { Image } from 'expo-image';
@@ -6,6 +6,7 @@ import { FlatList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryTile, ContinueTile, ProductTile } from '@/components/content';
 import { HomeButtons } from '@/components/home-buttons';
+import { RoutineTodayCard } from '@/components/routine-parts';
 import { ErrorView, Loading, Screen, Section, Txt } from '@/components/ui';
 import { greeting, uniqueById } from '@/lib/format';
 import { useHome } from '@/lib/queries';
@@ -36,6 +37,8 @@ export default function HomeScreen() {
         )}
         <Txt variant="display">{name ? `${greeting()}, ${name}` : greeting()}</Txt>
       </View>
+
+      <RoutineTodayCard />
 
       {h.buttons && h.buttons.length > 0 ? <HomeButtons buttons={h.buttons} /> : null}
 

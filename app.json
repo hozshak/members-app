@@ -79,6 +79,14 @@
         {
           "faceIDPermission": "Damit nur du deine Fortschrittsfotos sehen kannst."
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
       ]
     ],
     "experiments": {

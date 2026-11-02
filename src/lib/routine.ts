@@ -103,14 +103,14 @@ export interface RoutinePrefs {
   photoReminder: boolean;
   /** The progress photos need Face ID / the phone's code. */
   photoLock: boolean;
-  /** In the routine: front camera as a mirror, voice guidance, length. */
-  mirror: boolean; voice: boolean; length: RoutineLength;
+  /** In the routine: front camera as a mirror, small sounds, length. */
+  mirror: boolean; sound: boolean; length: RoutineLength;
   /** The exercise video next to the mirror (on by default). */
   video: boolean;
 }
 const PREFS_KEY = 'members.routine';
 export const DEFAULT_PREFS: RoutinePrefs = {
-  reminder: false, hour: 8, minute: 0, rescue: false, photoReminder: false, photoLock: false, mirror: false, voice: true, length: 'normal', video: true,
+  reminder: false, hour: 8, minute: 0, rescue: false, photoReminder: false, photoLock: false, mirror: false, sound: true, length: 'normal', video: true,
 };
 
 export async function loadPrefs(): Promise<RoutinePrefs> {

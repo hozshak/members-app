@@ -43,6 +43,7 @@ function RootStack() {
         </Stack.Protected>
         <Stack.Protected guard={!!community && !!token}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="pdf" options={{ presentation: 'fullScreenModal' }} />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>
