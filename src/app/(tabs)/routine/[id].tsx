@@ -45,7 +45,8 @@ function buzz(kind: 'step' | 'done') {
 export default function RoutineSessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const q = useRoutines();
-  useKeepAwake();
+  // (leaving before the lock is active is no error: in the browser the wake lock takes a moment or is refused)
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
   const routine = q.data.find((r) => r.id === id);
