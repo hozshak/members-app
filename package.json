@@ -8,6 +8,7 @@
     "@react-native-community/datetimepicker": "9.2.1",
     "@tanstack/react-query": "^5.105.0",
     "expo": "~58.0.22",
+    "expo-asset": "~58.0.19",
     "expo-audio": "~58.0.11",
     "expo-camera": "~58.0.14",
     "expo-constants": "~58.0.14",
