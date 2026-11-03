@@ -1,11 +1,11 @@
-// Home: greeting, the thought of the day, today's routine (one tap to its start), where the member stands in the programmes
+// Home: greeting, the quote of the day, today's routine (one tap to its start), where the member stands in the programmes
 // and the routine, then the buttons of the start page (e.g. "WhatsApp-Gruppe", "Bewertung abgeben" — as on the website).
 // The contents themselves are under "Inhalte".
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeButtons } from '@/components/home-buttons';
-import { DailyThought, ProgressOverview } from '@/components/home-parts';
+import { DailyQuote, ProgressOverview } from '@/components/home-parts';
 import { RoutineTodayCard } from '@/components/routine-parts';
 import { ErrorView, Loading, Screen, Txt } from '@/components/ui';
 import { greeting, uniqueById } from '@/lib/format';
@@ -37,7 +37,7 @@ export default function HomeScreen() {
         <Txt variant="display">{name ? `${greeting()}, ${name}` : greeting()}</Txt>
       </View>
 
-      <DailyThought />
+      <DailyQuote />
 
       <RoutineTodayCard />
 
