@@ -1,16 +1,23 @@
 // The text of a lesson (Markdown of the software's lesson editor). Videos embedded in it (`::video{id="…"}` on their own
 // line) become players at that place; `<u>…</u>` (underline) is shown as plain text; links open as in src/lib/links.ts,
-// also addresses written without a link around them.
+// also addresses written without a link around them. Lesson texts hold no program code: a block Markdown takes for code (text
+// indented by accident, as in the lesson "Kurs als App") is shown as normal text, as on the website.
 import { View } from 'react-native';
-import Markdown, { MarkdownIt } from 'react-native-markdown-display';
+import Markdown, { MarkdownIt, type ASTNode, type RenderRules } from 'react-native-markdown-display';
 import { useOpenLink } from '@/lib/links';
 import { space, type, usePalette } from '@/lib/theme';
 import type { LessonEmbed } from '@/lib/types';
+import { LinkedText } from './linked-text';
 import { LessonPlayer } from './player';
 import { Card, Txt } from './ui';
 
 const VIDEO_LINE = /^::video\{id="([0-9a-f-]{36})"\}\s*$/;
 const MARKDOWN = MarkdownIt({ typographer: true, linkify: true });
+
+const plainBlock = (node: ASTNode) => (
+  <LinkedText key={node.key} text={node.content.replace(/^[ \t]+/gm, '').trim()} style={{ marginBottom: space.m }} />
+);
+const RULES: RenderRules = { code_block: plainBlock, fence: plainBlock };
 
 type Part = { kind: 'md'; text: string } | { kind: 'video'; id: string };
 
@@ -49,6 +56,7 @@ export function LessonText({ lessonId, bodyMd, embeds }: { lessonId: string; bod
     ordered_list: { marginBottom: space.m },
     list_item: { marginBottom: space.xs },
     strong: { fontWeight: '700' as const },
+    code_inline: { color: p.text, backgroundColor: p.surfaceAlt, borderColor: p.line },
     blockquote: { backgroundColor: p.surfaceAlt, borderLeftColor: p.accent, borderLeftWidth: 3, paddingHorizontal: space.m, paddingVertical: space.s },
     hr: { backgroundColor: p.line, marginVertical: space.l },
   };
@@ -60,7 +68,7 @@ export function LessonText({ lessonId, bodyMd, embeds }: { lessonId: string; bod
   return (
     <View>
       {splitLessonText(bodyMd).map((part, i) => {
-        if (part.kind === 'md') return <Markdown key={i} style={styles} markdownit={MARKDOWN} onLinkPress={onLinkPress}>{part.text}</Markdown>;
+        if (part.kind === 'md') return <Markdown key={i} style={styles} markdownit={MARKDOWN} rules={RULES} onLinkPress={onLinkPress}>{part.text}</Markdown>;
         const embed = embeds.find((e) => e.id === part.id);
         if (!embed?.available) {
           return (
