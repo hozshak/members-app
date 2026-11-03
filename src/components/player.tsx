@@ -13,8 +13,9 @@
 // Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, plays exactly while
 // `playing` is true (the countdown of the exercise), has buttons for "10 seconds back", "Neu laden" and sound instead of
 // controls; the parent learns the video's shape (onAspect) and when it waits for data (onWaiting).
-// A picture that stands still although it should play counts as waiting, and a stuck or failed video reloads by itself (at
-// most twice per stall). With `file` (the video is on the phone, lib/exercise-videos.ts) it plays from there, whatever the
+// A video stopped from outside (a call, the system's audio) goes on by itself. A picture that stands still although the video
+// plays counts as waiting, and a stuck or failed video reloads by itself (at most twice per stall; never one that is only
+// buffering, that would throw away what it has). With `file` (the video is on the phone, lib/exercise-videos.ts) it plays from there, whatever the
 // connection does; the server only adds the watermark, and the parent may keep it mounted hidden with `playing` false: it is
 // ready at once at its turn.
 import { Ionicons } from '@expo/vector-icons';
@@ -241,15 +242,18 @@ export function LessonPlayer({
     if (coach) setMuted(player, muted);
   }, [coach, muted, player]);
 
-  // coach: a picture that stands still although it should play (no status tells that)
+  // coach: it should play: stopped from outside it goes on; a picture that stands still anyway counts as waiting (no status
+  // tells that)
   useEffect(() => {
     if (!coach || !loaded || !playing || status !== 'readyToPlay') return;
     let last = player.currentTime;
     let still = 0;
     const t = setInterval(() => {
+      if (!player.playing) player.play();
       const now = player.currentTime;
       still = Math.abs(now - last) < 0.05 ? still + 1 : 0;
       last = now;
+      if (still === 0) autoReloads.current = 0;
       setFrozen(still >= FROZEN_AFTER_SEC);
     }, 1000);
     return () => {
@@ -340,15 +344,11 @@ export function LessonPlayer({
   useEffect(() => {
     onWaiting?.(waiting);
   }, [onWaiting, waiting]);
-  // coach: stuck for a while or failed (e.g. the address ran out while it waited hidden), while it should play: a new
-  // address by itself. A video that is only loading ahead is left alone.
-  const stuck = coach && !!playing && (waiting || failed);
+  // coach: standing still for a while or failed (e.g. the address ran out), while it should play: a new address by itself. A
+  // video that is only loading or buffering is left alone.
+  const stuck = coach && !!playing && (frozen || failed);
   useEffect(() => {
-    if (!stuck) {
-      autoReloads.current = 0;
-      return;
-    }
-    if (autoReloads.current >= AUTO_RELOADS) return;
+    if (!stuck || autoReloads.current >= AUTO_RELOADS) return;
     const t = setTimeout(() => {
       autoReloads.current += 1;
       void reload(`hängt (Versuch ${autoReloads.current})`);
@@ -367,7 +367,7 @@ export function LessonPlayer({
   const waitingView = waiting ? (
     <View style={[StyleSheet.absoluteFill, styles.center, { gap: space.s, padding: space.s, backgroundColor: slow ? 'rgba(0,0,0,0.45)' : 'transparent' }]} pointerEvents="box-none">
       <ActivityIndicator color="#FFFFFF" />
-      {slow && !mini ? <Text style={styles.slow} accessibilityLiveRegion="polite">Internet langsam – Video lädt …</Text> : null}
+      {slow && !mini ? <Text style={styles.slow} accessibilityLiveRegion="polite">{localFile ? 'Video lädt …' : 'Internet langsam – Video lädt …'}</Text> : null}
       {slow && !mini ? (
         <Pressable accessibilityRole="button" hitSlop={8} onPress={() => void reload('Knopf')} style={styles.reload}>
           <Ionicons name="refresh" size={16} color="#FFFFFF" />

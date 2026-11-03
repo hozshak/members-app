@@ -1,6 +1,9 @@
 // The small sounds of the routine instead of a voice (owner 02.11.2026: "ich will nicht, dass er spricht, aber so kleine
 // Töne"): a short tick in the last three seconds, a soft two-note sound at the next exercise, a little chime at the end.
 // They mix with the sound of the exercise video and other apps instead of stopping them. Made by scripts/make-tones.mjs.
+// keepAudioSessionActive: without it expo-audio switches the phone's audio session off after every sound, because it only
+// knows its own players. iOS then stops whatever else is running in that session, also the exercise video of expo-video: the
+// "hanging" videos of the routine (03.11.2026; lessons have no sounds, they never hung).
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 const SOURCES = {
@@ -21,7 +24,7 @@ export function prepareTones(): void {
   }
   for (const tone of Object.keys(SOURCES) as Tone[]) {
     try {
-      players[tone] ??= createAudioPlayer(SOURCES[tone]);
+      players[tone] ??= createAudioPlayer(SOURCES[tone], { keepAudioSessionActive: true });
     } catch { /* no sound, the routine goes on */ }
   }
 }
