@@ -1,5 +1,5 @@
 // Routine overview, the most important first: today's routine with the big start button, today's progress and this week
-// at a glance; the exercises to tick off (all ticked = day done); the member's own goal ("Mein Ziel" with a progress bar
+// at a glance; the plans under way ("Von Mailin empfohlen", zones); the exercises to tick off (all ticked = day done); the member's own goal ("Mein Ziel" with a progress bar
 // and a forecast); "Gezielt üben" (short sessions by zone); a challenge when the coach made the routine one ("Tag 12 von 30"); the streak with the last five weeks
 // and a share picture, the badges, the progress photos (optionally behind Face ID) and the reminders. The length is chosen
 // on the start screen of the routine. Several routines follow as small cards; streak and badges belong to the first.
@@ -11,13 +11,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShareCard } from '@/components/share-card';
-import { openRoutine, ProgressRing, routineSeconds, WeekStrip, ZonesSection } from '@/components/routine-parts';
+import { openPlan, openRoutine, ProgressRing, routineSeconds, WeekStrip, ZonesSection } from '@/components/routine-parts';
 import { Button, Card, ErrorView, Field, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
+import { mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
 import {
   allowNotifications, badgesOf, cancelTodaysRescue, clockTime, listPhotos, newBadges, REMINDER_DAYS, scaledDuration, syncReminders, useChallenge, useCheckIn,
   useRoutinePrefs, useRoutines,
@@ -189,28 +190,60 @@ function ChallengeBlock({ routine }: { routine: MemberRoutine }) {
   );
 }
 
+/** A plan: where the member stands, one tap to its page. */
+function PlanCard({ routine }: { routine: MemberRoutine }) {
+  const p = usePalette();
+  const ch = routine.challenge;
+  const state = planState(routine);
+  return (
+    <Card onPress={() => openPlan(routine.id)} accessibilityLabel={`${planLabel(routine)}: ${routine.title}`} style={{ padding: space.l, gap: space.s }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
+        <Ionicons name={state === 'over' ? 'trophy' : 'ribbon'} size={18} color={p.accent} />
+        <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>{planLabel(routine)}</Txt>
+        <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
+      </View>
+      <Txt variant="heading">{routine.title}</Txt>
+      {state === 'running' && ch ? (
+        <>
+          <ProgressBar value={(ch.dayNumber ?? 0) / ch.days} />
+          <Txt variant="small" muted>Tag {ch.dayNumber} von {ch.days} · {ch.doneDays} erledigt</Txt>
+        </>
+      ) : (
+        <Txt variant="small" muted>{state === 'over' ? 'Zu Ende: Sieh dir deinen Unterschied an.' : 'Noch nicht gestartet'}</Txt>
+      )}
+    </Card>
+  );
+}
+
 /** Today's routine: what, how long, how far today, this week, and the way in. */
-function TodayHero({ routine }: { routine: MemberRoutine }) {
+function TodayHero({ routine, days }: { routine: MemberRoutine; days: string[] }) {
   const p = usePalette();
   const [prefs] = useRoutinePrefs();
   const checks = useDayChecks(routine.id);
   const done = routine.stats.doneToday;
+  const state = routine.plan ? planState(routine) : null;
   const total = routine.steps.length;
   const ticked = done ? total : routine.steps.filter((s) => checks.isDone(s.id)).length;
   return (
     <Card style={{ padding: space.l, gap: space.l, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
         <View style={{ flex: 1, gap: space.xs }}>
-          <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : 'Heute dran'}</Txt>
+          <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : routine.plan ? planLabel(routine) : 'Heute dran'}</Txt>
           <Txt variant="title">{routine.title}</Txt>
-          <Txt muted>{plural(total, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}</Txt>
+          <Txt muted>
+            {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
+            {plural(total, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}
+          </Txt>
         </View>
         <ProgressRing size={76} share={ticked / Math.max(1, total)} stroke={8} track={p.surface}>
           {done ? <Ionicons name="checkmark" size={32} color={p.accent} /> : <Txt variant="heading" style={{ fontVariant: ['tabular-nums'] }}>{ticked}/{total}</Txt>}
         </ProgressRing>
       </View>
-      <WeekStrip days={routine.stats.days} />
-      <Button label={done ? 'Noch einmal machen' : 'Routine starten'} kind={done ? 'secondary' : 'primary'} onPress={() => openRoutine(routine.id)} />
+      <WeekStrip days={days} />
+      {state === 'open' || state === 'over'
+        ? <Button label={state === 'open' ? 'Ansehen und starten' : 'Ergebnis ansehen'} onPress={() => openPlan(routine.id)} />
+        : <Button label={done ? 'Noch einmal machen' : 'Routine starten'} kind={done ? 'secondary' : 'primary'} onPress={() => openRoutine(routine.id)} />}
+      {state === 'running' ? <Button label="Zum Plan" kind="ghost" onPress={() => openPlan(routine.id)} /> : null}
     </Card>
   );
 }
@@ -559,7 +592,8 @@ export default function RoutineScreen() {
   const { community } = useSession();
   const q = useRoutines();
   const [prefs] = useRoutinePrefs();
-  const main = q.data?.[0] ?? null;
+  const swaps = useSwaps();
+  const main = mainRoutine(q.data);
 
   // keep the scheduled reminders in line with today's state (e.g. no "Serie retten" once today is done)
   useEffect(() => {
@@ -569,19 +603,26 @@ export default function RoutineScreen() {
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
 
+  // streak, calendar, goal and badges count every routine: changing from one plan to another does not lose them
+  const stats = overallStats(q.data);
+  const counted = main ? { ...main, stats } : null;
+  const today = main ? withSwaps(main, swaps.steps) : null;
+  const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
+  const others = q.data.filter((r) => !r.plan && r.id !== main?.id);
+
   return (
     <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
         <Txt variant="display">Routine</Txt>
-        {main && main.stats.streak > 0 ? (
-          <View accessibilityLabel={`${plural(main.stats.streak, 'Tag', 'Tage')} in Folge`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: p.accentSoft }}>
+        {stats.streak > 0 ? (
+          <View accessibilityLabel={`${plural(stats.streak, 'Tag', 'Tage')} in Folge`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: p.accentSoft }}>
             <Ionicons name="flame" size={18} color={p.accent} />
-            <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{main.stats.streak}</Txt>
+            <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{stats.streak}</Txt>
           </View>
         ) : null}
       </View>
 
-      {!main ? (
+      {!main || !today || !counted ? (
         <>
           <Card style={{ padding: space.xl, gap: space.s }}>
             <Ionicons name="flame-outline" size={32} color={p.accent} />
@@ -592,22 +633,23 @@ export default function RoutineScreen() {
         </>
       ) : (
         <>
-          <TodayHero routine={main} />
-          <TodayChecklist routine={main} />
+          <TodayHero routine={today} days={stats.days} />
+          {plans.map((r) => <PlanCard key={r.id} routine={r} />)}
+          {!main.plan || planState(main) === 'running' ? <TodayChecklist routine={today} /> : null}
           <ZonesSection />
-          <GoalCard routine={main} />
-          <ChallengeBlock routine={main} />
-          {q.data.length > 1 ? (
+          <GoalCard routine={counted} />
+          {main.plan ? null : <ChallengeBlock routine={main} />}
+          {others.length > 0 ? (
             <Section title="Weitere Routinen">
               <View style={{ gap: space.m }}>
-                {q.data.slice(1).map((r) => <OtherRoutine key={r.id} routine={r} />)}
+                {others.map((r) => <OtherRoutine key={r.id} routine={r} />)}
               </View>
             </Section>
           ) : null}
           <Section title="Deine Serie">
-            <StreakCard routine={main} />
+            <StreakCard routine={counted} />
           </Section>
-          <BadgesCard routine={main} />
+          <BadgesCard routine={counted} />
         </>
       )}
 

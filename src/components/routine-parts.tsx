@@ -1,5 +1,5 @@
 // Small pieces shared by the routine screens: the progress ring, the length picker (Kurz / Normal / Lang), the minutes of a
-// zone session, this week as a row of days, "Gezielt üben" (the zones), and the routine of today as a card for the start page.
+// zone session, this week as a row of days, "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a card for the start page.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -7,6 +7,7 @@ import { Pressable, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
+import { goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
 import { LENGTH_LABEL, scaledDuration, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineLength } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
@@ -17,6 +18,9 @@ const WEEKDAY = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
 
 /** The way into a routine: its start screen. */
 export const openRoutine = (id: string) => router.push(`/routine/${encodeURIComponent(id)}` as Href);
+
+/** The page of a plan (goal, today's exercises, photos). */
+export const openPlan = (id: string) => router.push({ pathname: '/routine/plan', params: { id } } as unknown as Href);
 
 /** Total seconds of a routine at a length. */
 export const routineSeconds = (routine: MemberRoutine, length: RoutineLength) =>
@@ -92,25 +96,38 @@ export function MinutesPicker({ value, options, onChange }: { value: number; opt
 export function ZonesSection() {
   const p = usePalette();
   const q = useZones();
+  const routines = useRoutines();
   const zones = q.data ?? [];
   if (zones.length === 0) return null;
+  const planOf = (zoneId: string) => routines.data?.find((r) => r.plan?.kind === 'zone' && r.plan.zoneId === zoneId);
+  const line = (zoneId: string, exercises: number) => {
+    const plan = planOf(zoneId);
+    if (!plan?.plan) return plural(exercises, 'Übung', 'Übungen');
+    const state = planState(plan);
+    if (state === 'running') return `Tag ${plan.challenge?.dayNumber} von ${plan.challenge?.days}`;
+    return state === 'over' ? 'Plan beendet' : `Plan · ${goalLabel(plan.plan.days)}`;
+  };
   return (
     <Section title="Gezielt üben">
-      <Txt muted>Wenig Zeit? Nimm dir nur einen Bereich vor.</Txt>
+      <Txt muted>Wähle einen Bereich und setz dir ein Ziel. Dein Plan sagt dir jeden Tag, was dran ist.</Txt>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
         {zones.map((z) => (
           <Pressable
             key={z.id}
             accessibilityRole="button"
-            accessibilityLabel={`${z.name}, ${plural(z.exercises.length, 'Übung', 'Übungen')}`}
-            onPress={() => router.push({ pathname: '/routine/zone', params: { id: z.id } } as unknown as Href)}
+            accessibilityLabel={`${z.name}, ${line(z.id, z.exercises.length)}`}
+            onPress={() => {
+              const plan = planOf(z.id);
+              if (plan) openPlan(plan.id);
+              else router.push({ pathname: '/routine/zone', params: { id: z.id } } as unknown as Href);
+            }}
             style={({ pressed }) => ({
               flexGrow: 1, flexBasis: '45%', minHeight: 72, justifyContent: 'center', gap: 2, padding: space.m, borderRadius: radius.l, borderWidth: 1,
               borderColor: p.line, backgroundColor: p.surface, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }],
             })}
           >
             <Txt variant="heading" numberOfLines={1}>{z.name}</Txt>
-            <Txt variant="small" muted>{plural(z.exercises.length, 'Übung', 'Übungen')}</Txt>
+            <Txt variant="small" muted>{line(z.id, z.exercises.length)}</Txt>
           </Pressable>
         ))}
       </View>
@@ -159,12 +176,14 @@ export function RoutineTodayCard() {
   const p = usePalette();
   const q = useRoutines();
   const [prefs] = useRoutinePrefs();
-  const routine = q.data?.[0];
+  const routine = mainRoutine(q.data);
   if (!routine || routine.steps.length === 0) return null;
   const done = routine.stats.doneToday;
+  const streak = overallStats(q.data).streak;
+  const state = routine.plan ? planState(routine) : null;
   return (
     <Card
-      onPress={() => openRoutine(routine.id)}
+      onPress={() => (state === 'running' || !routine.plan ? openRoutine(routine.id) : openPlan(routine.id))}
       accessibilityLabel={`${routine.title}${done ? ', heute erledigt' : ', starten'}`}
       style={{ padding: space.l, flexDirection: 'row', alignItems: 'center', gap: space.m, backgroundColor: p.accentSoft, borderColor: 'transparent' }}
     >
@@ -172,11 +191,12 @@ export function RoutineTodayCard() {
         <Ionicons name={done ? 'checkmark' : 'flame'} size={done ? 30 : 26} color={done ? p.onAccent : p.accent} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : 'Deine Routine heute'}</Txt>
+        <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : routine.plan ? planLabel(routine) : 'Deine Routine heute'}</Txt>
         <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
         <Txt variant="small" muted>
+          {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
           {plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}
-          {routine.stats.streak > 0 ? ` · ${plural(routine.stats.streak, 'Tag', 'Tage')} in Folge` : ''}
+          {streak > 0 ? ` · ${plural(streak, 'Tag', 'Tage')} in Folge` : ''}
         </Txt>
       </View>
       <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: done ? p.surface : p.accent, alignItems: 'center', justifyContent: 'center' }}>

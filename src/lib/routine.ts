@@ -21,12 +21,19 @@ export interface RoutineStep {
   id: Id; title: string; description: string; durationSec: number; videoId: Id | null;
   videoTitle: string | null; videoThumbnailUrl: string | null; videoAvailable: boolean;
 }
+/** A routine with its own exercises per day (shared/types.ts MemberRoutinePlan, lib/plans.ts): `steps` are then those of today. */
+export interface MemberRoutinePlan {
+  kind: 'recommended' | 'zone'; label: string; zoneId: Id | null; zoneName: string | null;
+  days: number; longDays: number | null; planDays: number; planDay: number;
+}
 /** An N-day challenge of a routine (shared/types.ts RoutineChallenge); null = the routine is no challenge. */
 export interface RoutineChallenge { days: number; startDay: string | null; dayNumber: number | null; doneDays: number; completed: boolean }
 export interface MemberRoutine {
   id: Id; title: string; description: string; totalSec: number; steps: RoutineStep[]; stats: RoutineStats;
   /** Missing on software versions before the challenges. */
   challenge?: RoutineChallenge | null;
+  /** Missing on software versions before the plans. */
+  plan?: MemberRoutinePlan | null;
 }
 
 export const routineKey = ['routines'] as const;

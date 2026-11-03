@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,8 +29,9 @@ import { useExerciseVideos } from '@/lib/exercise-videos';
 import { clock, minutes, plural } from '@/lib/format';
 import { useDayChecks } from '@/lib/goal';
 import {
-  cancelTodaysRescue, newBadges, scaledDuration, useCheckIn, useRoutinePrefs, type Badge, type MemberRoutine, type RoutineStats,
+  cancelTodaysRescue, newBadges, scaledDuration, useCheckIn, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineStats,
 } from '@/lib/routine';
+import { overallStats } from '@/lib/plans';
 import { useApi } from '@/lib/session';
 import { playTone, prepareTones } from '@/lib/sounds';
 import { radius, space, usePalette } from '@/lib/theme';
@@ -144,7 +145,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const [count, setCount] = useState(3);
   // the durations of this run (fixed at "Los geht's"; changing the length later does not disturb the run)
   const [durations, setDurations] = useState<number[]>([]);
-  const [statsBefore] = useState(() => routine.stats);
+  // the series counts every routine (lib/plans.ts), so the answer of this check-in alone is not what the member sees
+  const routines = useRoutines();
+  const [statsBefore] = useState(() => overallStats(routines.data));
   const [index, setIndex] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const [running, setRunning] = useState(false);
@@ -156,7 +159,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const [streamAnyway, setStreamAnyway] = useState(false);
   const [finished, setFinished] = useState<RoutineStats | null>(null);
   const [practiceDone, setPracticeDone] = useState(false);
-  const [earned, setEarned] = useState<Badge[]>([]);
   // end time of the running countdown (set when it starts or resumes)
   const endsAt = useRef(0);
   const lastTick = useRef('');
@@ -177,7 +179,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   // the countdown waits while the video waits for data (at most HOLD_MAX_MS)
   const held = video && (waiting || loadingFile) && !holdOver;
   const ticking = phase === 'run' && running && !held && !finished && !practiceDone;
-  const card = useShareCard(finished ? { big: String(finished.streak), label: finished.streak === 1 ? 'Tag in Folge' : 'Tage in Folge', line: routine.title } : null);
+  const series = finished ? overallStats(routines.data) : null;
+  const earned = series ? newBadges(statsBefore, series) : [];
+  const card = useShareCard(series ? { big: String(series.streak), label: series.streak === 1 ? 'Tag in Folge' : 'Tage in Folge', line: routine.title } : null);
 
   const onWaiting = useCallback((w: boolean) => {
     setWaiting(w);
@@ -220,7 +224,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const save = () => checkIn.mutate(true, {
     onSuccess: ({ stats }) => {
       setFinished(stats);
-      setEarned(newBadges(statsBefore, stats));
       void cancelTodaysRescue();
     },
   });
@@ -403,8 +406,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           <Ionicons name="flame" size={64} color={p.accent} />
         </View>
         <Txt variant="display" style={{ textAlign: 'center' }}>Geschafft!</Txt>
-        {finished ? (
-          <Txt variant="title" style={{ textAlign: 'center' }}>{finished.streak === 1 ? 'Tag 1 deiner Serie' : `${finished.streak} Tage in Folge`}</Txt>
+        {series ? (
+          <Txt variant="title" style={{ textAlign: 'center' }}>{series.streak === 1 ? 'Tag 1 deiner Serie' : `${series.streak} Tage in Folge`}</Txt>
         ) : checkIn.isError ? (
           <View style={{ gap: space.m, alignItems: 'center' }}>
             <Txt color={p.danger} style={{ textAlign: 'center' }}>{errorText(checkIn.error)}</Txt>
@@ -425,6 +428,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           </View>
         ) : null}
         <Txt muted style={{ textAlign: 'center' }}>{routine.title} ist für heute erledigt. Bis morgen!</Txt>
+        {finished && routine.plan && routine.challenge?.dayNumber === routine.challenge?.days ? (
+          <Button label="Nachher-Foto machen" onPress={() => router.replace({ pathname: '/routine/kamera', params: { plan: routine.id, slot: 'end' } } as unknown as Href)} style={{ alignSelf: 'stretch' }} />
+        ) : null}
         {finished && Platform.OS !== 'web' ? <Button label="Erfolg teilen" kind="secondary" onPress={() => void card.share()} style={{ alignSelf: 'stretch' }} /> : null}
         <Button label="Fertig" onPress={() => router.back()} style={{ alignSelf: 'stretch' }} />
       </Screen>

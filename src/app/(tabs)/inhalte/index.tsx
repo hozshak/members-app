@@ -1,11 +1,13 @@
-// "Inhalte": a search over every lesson, then everything the member has: the programmes (inside them the videos), the
-// categories open for every member and those unlocked by a tag, what was started ("Weiterschauen"), the Merkliste (lessons
-// saved on this phone). Teasers (things to buy) are left out.
+// "Inhalte": a search over every lesson, then everything the member has: the programmes (inside them the videos), all PDFs
+// ("Deine Downloads"; a product of nothing but PDFs, like The Face Code, is no programme), the categories open for every member
+// and those unlocked by a tag, what was started ("Weiterschauen"), the Merkliste (lessons saved on this phone). Teasers (things
+// to buy) are left out.
 import { useState } from 'react';
 import { FlatList, Pressable, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CategoryTile, ContinueTile, kindLabel, LessonLink, ProductTile } from '@/components/content';
+import { DownloadRow } from '@/components/download';
 import { ErrorView, Loading, Screen, Section, Txt } from '@/components/ui';
 import { plural, uniqueById } from '@/lib/format';
 import { useBookmarks } from '@/lib/bookmarks';
@@ -45,6 +47,8 @@ export default function LibraryScreen() {
   const lib = q.data;
   const empty = lib.products.length === 0 && lib.free.length === 0 && lib.more.length === 0;
   const continueWatching = uniqueById(home.data?.continueWatching ?? []);
+  const programmes = lib.products.filter((x) => x.itemCount > 0 || x.downloads.length === 0);
+  const downloads = uniqueById(lib.products.flatMap((x) => x.downloads));
 
   return (
     <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
@@ -71,10 +75,18 @@ export default function LibraryScreen() {
 
       {searching ? <SearchResults query={query.trim()} /> : null}
 
-      {!searching && lib.products.length > 0 ? (
-        <Section title={lib.products.length === 1 ? 'Dein Programm' : 'Deine Programme'}>
+      {!searching && programmes.length > 0 ? (
+        <Section title={programmes.length === 1 ? 'Dein Programm' : 'Deine Programme'}>
           <View style={{ gap: space.l }}>
-            {lib.products.map((product) => <ProductTile key={product.id} product={product} />)}
+            {programmes.map((product) => <ProductTile key={product.id} product={product} />)}
+          </View>
+        </Section>
+      ) : null}
+
+      {!searching && downloads.length > 0 ? (
+        <Section title="Deine Downloads">
+          <View style={{ gap: space.s }}>
+            {downloads.map((f) => <DownloadRow key={f.id} file={f} />)}
           </View>
         </Section>
       ) : null}

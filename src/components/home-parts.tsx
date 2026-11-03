@@ -8,7 +8,8 @@ import { plural } from '@/lib/format';
 import { goalProgress, useGoal } from '@/lib/goal';
 import { quoteOfDay } from '@/lib/motivation';
 import { localDay, useOpen } from '@/lib/nav';
-import { useRoutines, type MemberRoutine } from '@/lib/routine';
+import { mainRoutine, overallStats } from '@/lib/plans';
+import { useRoutines, type RoutineStats } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import type { CategoryCard, MemberProduct } from '@/lib/types';
 import { WeekStrip } from './routine-parts';
@@ -91,9 +92,8 @@ function Figure({ value, label }: { value: string; label: string }) {
   );
 }
 
-function RoutineProgress({ routine }: { routine: MemberRoutine }) {
+function RoutineProgress({ stats }: { stats: RoutineStats }) {
   const [goal] = useGoal();
-  const { stats } = routine;
   const reached = goal ? goalProgress(goal, stats) : null;
   return (
     <Card onPress={() => router.navigate('/routine' as Href)} accessibilityLabel="Deine Routine" style={{ padding: space.l, gap: space.m }}>
@@ -111,7 +111,7 @@ function RoutineProgress({ routine }: { routine: MemberRoutine }) {
 /** Nothing when there is nothing to count yet. */
 export function ProgressOverview({ products, others }: { products: readonly MemberProduct[]; others: readonly CategoryCard[] }) {
   const routines = useRoutines();
-  const routine = routines.data?.[0];
+  const routine = mainRoutine(routines.data);
   const counted = products.filter((x) => x.itemCount > 0);
   const rest = countOf(others.filter((c) => c.access === 'full'));
   const hasRoutine = !!routine && routine.steps.length > 0;
@@ -123,7 +123,7 @@ export function ProgressOverview({ products, others }: { products: readonly Memb
         {rest.total > 0 ? (
           <ProgressRow title="Weitere Inhalte" done={rest.done} total={rest.total} line={null} onPress={() => router.navigate('/inhalte' as Href)} />
         ) : null}
-        {hasRoutine ? <RoutineProgress routine={routine} /> : null}
+        {hasRoutine ? <RoutineProgress stats={overallStats(routines.data)} /> : null}
       </View>
     </Section>
   );
