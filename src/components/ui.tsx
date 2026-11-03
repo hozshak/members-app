@@ -78,15 +78,15 @@ export function Card({ children, onPress, style, accessibilityLabel }: {
   );
 }
 
-/** A cover image of the community (sent with the session); a soft accent field with the initial when there is none. */
+/** A cover image of the community (sent with the session); a soft accent field with the initial when there is none. `aspect` null: the shape comes from `style`. */
 export function Cover({ url, title, aspect = 16 / 9, style, rounded = radius.m, children }: {
-  url: string | null; title: string; aspect?: number; style?: StyleProp<ViewStyle>; rounded?: number; children?: ReactNode;
+  url: string | null; title: string; aspect?: number | null; style?: StyleProp<ViewStyle>; rounded?: number; children?: ReactNode;
 }) {
   const p = usePalette();
   const { api } = useSession();
   const initial = Array.from(title.trim())[0]?.toLocaleUpperCase('de-DE') ?? '';
   return (
-    <View style={[{ aspectRatio: aspect, borderRadius: rounded, overflow: 'hidden', backgroundColor: p.accentSoft }, style]}>
+    <View style={[aspect ? { aspectRatio: aspect } : null, { borderRadius: rounded, overflow: 'hidden', backgroundColor: p.accentSoft }, style]}>
       {url && api ? (
         <Image source={{ uri: api.url(url), headers: api.mediaHeaders() }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} accessibilityIgnoresInvertColors />
       ) : (

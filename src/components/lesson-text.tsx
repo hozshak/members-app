@@ -1,14 +1,16 @@
 // The text of a lesson (Markdown of the software's lesson editor). Videos embedded in it (`::video{id="…"}` on their own
-// line) become players at that place; `<u>…</u>` (underline) is shown as plain text; links open in the browser.
-import * as WebBrowser from 'expo-web-browser';
+// line) become players at that place; `<u>…</u>` (underline) is shown as plain text; links open as in src/lib/links.ts,
+// also addresses written without a link around them.
 import { View } from 'react-native';
-import Markdown from 'react-native-markdown-display';
+import Markdown, { MarkdownIt } from 'react-native-markdown-display';
+import { useOpenLink } from '@/lib/links';
 import { space, type, usePalette } from '@/lib/theme';
 import type { LessonEmbed } from '@/lib/types';
 import { LessonPlayer } from './player';
 import { Card, Txt } from './ui';
 
 const VIDEO_LINE = /^::video\{id="([0-9a-f-]{36})"\}\s*$/;
+const MARKDOWN = MarkdownIt({ typographer: true, linkify: true });
 
 type Part = { kind: 'md'; text: string } | { kind: 'video'; id: string };
 
@@ -50,14 +52,15 @@ export function LessonText({ lessonId, bodyMd, embeds }: { lessonId: string; bod
     blockquote: { backgroundColor: p.surfaceAlt, borderLeftColor: p.accent, borderLeftWidth: 3, paddingHorizontal: space.m, paddingVertical: space.s },
     hr: { backgroundColor: p.line, marginVertical: space.l },
   };
+  const openLink = useOpenLink();
   const onLinkPress = (url: string) => {
-    if (/^https?:\/\//i.test(url)) void WebBrowser.openBrowserAsync(url);
+    openLink(url);
     return false;
   };
   return (
     <View>
       {splitLessonText(bodyMd).map((part, i) => {
-        if (part.kind === 'md') return <Markdown key={i} style={styles} onLinkPress={onLinkPress}>{part.text}</Markdown>;
+        if (part.kind === 'md') return <Markdown key={i} style={styles} markdownit={MARKDOWN} onLinkPress={onLinkPress}>{part.text}</Markdown>;
         const embed = embeds.find((e) => e.id === part.id);
         if (!embed?.available) {
           return (
@@ -68,7 +71,7 @@ export function LessonText({ lessonId, bodyMd, embeds }: { lessonId: string; bod
         }
         return (
           <View key={i} style={{ marginBottom: space.m, gap: space.xs }}>
-            <LessonPlayer playPath={`/api/member/lessons/${encodeURIComponent(lessonId)}/embeds/${encodeURIComponent(part.id)}/play`} />
+            <LessonPlayer posterUrl={embed.thumbnailUrl} playPath={`/api/member/lessons/${encodeURIComponent(lessonId)}/embeds/${encodeURIComponent(part.id)}/play`} />
             {embed.title ? <Txt variant="small" muted>{embed.title}</Txt> : null}
           </View>
         );

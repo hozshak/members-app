@@ -26,15 +26,21 @@ const server = http.createServer((req, res) => {
     }
     for (const h of DROP_TO_BACKEND) delete headers[h];
   }
-  const out = http.request({ host: target.hostname, port: target.port, path: req.url, method: req.method, headers }, (up) => {
-    res.writeHead(up.statusCode ?? 502, up.headers);
-    up.pipe(res);
-  });
-  out.on('error', (err) => {
-    res.writeHead(502, { 'content-type': 'text/plain' });
-    res.end(`Proxy: ${target.host} nicht erreichbar (${err.message})`);
-  });
-  req.pipe(out);
+  // a slow line for testing: with a cookie `dev_slow_media=<ms>` every /media/v/ request waits that long
+  const slowMs = (req.url ?? '').startsWith('/media/v/') ? Number(/(?:^|;\s*)dev_slow_media=(\d+)/.exec(req.headers.cookie ?? '')?.[1] ?? 0) : 0;
+  const send = () => {
+    const out = http.request({ host: target.hostname, port: target.port, path: req.url, method: req.method, headers }, (up) => {
+      res.writeHead(up.statusCode ?? 502, up.headers);
+      up.pipe(res);
+    });
+    out.on('error', (err) => {
+      res.writeHead(502, { 'content-type': 'text/plain' });
+      res.end(`Proxy: ${target.host} nicht erreichbar (${err.message})`);
+    });
+    req.pipe(out);
+  };
+  if (slowMs) setTimeout(send, slowMs);
+  else send();
 });
 
 // websocket of the Expo dev server (reload, logs)

@@ -8,6 +8,7 @@ import { Pressable, View } from 'react-native';
 import { Comments } from '@/components/comments';
 import { DownloadRow } from '@/components/download';
 import { LessonText } from '@/components/lesson-text';
+import { LinkedText } from '@/components/linked-text';
 import { LessonPlayer } from '@/components/player';
 import { Button, Card, ErrorView, Loading, Screen, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
@@ -81,7 +82,7 @@ function Lesson({ v, refetch }: { v: VideoDetail; refetch: () => void }) {
     <Screen>
       <Stack.Screen options={{ title: v.sectionTitle ?? v.categoryTitle }} />
       {hasVideo ? (
-        <LessonPlayer autoPlay playPath={playPath} progressPath={progressPath} onTime={onTime} onCompleted={refetch} />
+        <LessonPlayer autoPlay posterUrl={v.thumbnailUrl} playPath={playPath} progressPath={progressPath} onTime={onTime} onCompleted={refetch} />
       ) : null}
 
       <View style={{ gap: space.xs }}>
@@ -95,7 +96,7 @@ function Lesson({ v, refetch }: { v: VideoDetail; refetch: () => void }) {
           <BookmarkButton video={v} />
           <LikeButton key={v.id} videoId={v.id} liked={v.likedByMe} count={v.likeCount} />
         </View>
-        {v.description ? <Txt muted>{v.description}</Txt> : null}
+        {v.description ? <LinkedText text={v.description} muted /> : null}
       </View>
 
       {v.bodyMd ? <LessonText lessonId={v.id} bodyMd={v.bodyMd} embeds={v.embeds} /> : null}

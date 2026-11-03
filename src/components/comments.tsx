@@ -9,6 +9,7 @@ import { uniqueById } from '@/lib/format';
 import { useApi } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 import type { Comment, CommentsPage, LikeState } from '@/lib/types';
+import { LinkedText } from './linked-text';
 import { Button, Txt } from './ui';
 
 const enc = encodeURIComponent;
@@ -148,7 +149,7 @@ function CommentItem({ comment: c, onReply, onChanged }: { comment: Comment; onR
         <Txt variant="small" muted>{ago(c.createdAt)}</Txt>
       </View>
       {c.status === 'pending' ? <Txt variant="small" color={p.textMuted}>Wartet auf Freigabe</Txt> : null}
-      <Txt>{c.status === 'deleted' ? 'Dieser Kommentar wurde gelöscht.' : c.body}</Txt>
+      {c.status === 'deleted' ? <Txt>Dieser Kommentar wurde gelöscht.</Txt> : <LinkedText text={c.body} />}
       {c.status !== 'deleted' ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.l, marginTop: space.xs }}>
           <Pressable accessibilityRole="button" accessibilityLabel={like.liked ? 'Gefällt mir nicht mehr' : 'Gefällt mir'} hitSlop={8} onPress={() => void toggleLike()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

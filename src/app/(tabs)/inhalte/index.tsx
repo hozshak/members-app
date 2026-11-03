@@ -1,16 +1,15 @@
-// "Inhalte": a search over every lesson, the Merkliste (lessons saved on this phone), then everything the member has as
-// a library — each programme with its categories (and progress), then the categories open for every member and those
-// unlocked by a tag. Teasers (things to buy) are left out.
+// "Inhalte": a search over every lesson, then everything the member has: the programmes (inside them the videos), the
+// categories open for every member and those unlocked by a tag, what was started ("Weiterschauen"), the Merkliste (lessons
+// saved on this phone). Teasers (things to buy) are left out.
 import { useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { FlatList, Pressable, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { CategoryTile, kindLabel, LessonLink } from '@/components/content';
-import { ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
+import { CategoryTile, ContinueTile, kindLabel, LessonLink, ProductTile } from '@/components/content';
+import { ErrorView, Loading, Screen, Section, Txt } from '@/components/ui';
 import { plural, uniqueById } from '@/lib/format';
-import { useOpen } from '@/lib/nav';
 import { useBookmarks } from '@/lib/bookmarks';
-import { searchable, useLibrary, useSearchIndex } from '@/lib/queries';
+import { searchable, useHome, useLibrary, useSearchIndex } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
 
 function SearchResults({ query }: { query: string }) {
@@ -35,8 +34,8 @@ function SearchResults({ query }: { query: string }) {
 export default function LibraryScreen() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const open = useOpen();
   const q = useLibrary();
+  const home = useHome();
   const bookmarks = useBookmarks();
   const [query, setQuery] = useState('');
   const searching = query.trim().length >= 2;
@@ -45,6 +44,7 @@ export default function LibraryScreen() {
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
   const lib = q.data;
   const empty = lib.products.length === 0 && lib.free.length === 0 && lib.more.length === 0;
+  const continueWatching = uniqueById(home.data?.continueWatching ?? []);
 
   return (
     <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
@@ -71,37 +71,13 @@ export default function LibraryScreen() {
 
       {searching ? <SearchResults query={query.trim()} /> : null}
 
-      {!searching && bookmarks.list.length > 0 ? (
-        <Section title="Merkliste">
-          <View style={{ gap: space.s }}>
-            {bookmarks.list.map((b) => (
-              <LessonLink key={b.id} id={b.id} title={b.title} subtitle={`${b.categoryTitle} · ${kindLabel(b.kind, b.durationSec)}`} icon="bookmark" />
-            ))}
+      {!searching && lib.products.length > 0 ? (
+        <Section title={lib.products.length === 1 ? 'Dein Programm' : 'Deine Programme'}>
+          <View style={{ gap: space.l }}>
+            {lib.products.map((product) => <ProductTile key={product.id} product={product} />)}
           </View>
         </Section>
       ) : null}
-
-      {!searching && lib.products.map((product) => {
-        const categories = uniqueById(product.categories.filter((c) => c.access !== 'teaser'));
-        const share = product.itemCount > 0 ? product.doneCount / product.itemCount : 0;
-        return (
-          <View key={product.id} style={{ gap: space.m }}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`${product.title} öffnen`} onPress={() => open.product(product.slug)} style={{ gap: space.xs }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
-                <Txt variant="title" style={{ flex: 1 }}>{product.title}</Txt>
-                <Ionicons name="chevron-forward" size={20} color={p.textMuted} />
-              </View>
-              {product.itemCount > 0 ? (
-                <View style={{ gap: space.xs }}>
-                  <ProgressBar value={share} />
-                  <Txt variant="small" muted>{product.doneCount} von {plural(product.itemCount, 'Inhalt', 'Inhalten')} erledigt</Txt>
-                </View>
-              ) : null}
-            </Pressable>
-            {categories.map((c) => <CategoryTile key={c.id} category={c} />)}
-          </View>
-        );
-      })}
 
       {!searching && lib.free.length > 0 ? (
         <Section title="Für alle Mitglieder">
@@ -112,6 +88,31 @@ export default function LibraryScreen() {
       {!searching && lib.more.length > 0 ? (
         <Section title="Weitere Inhalte">
           <View style={{ gap: space.m }}>{uniqueById(lib.more).map((c) => <CategoryTile key={c.id} category={c} />)}</View>
+        </Section>
+      ) : null}
+
+      {!searching && continueWatching.length > 0 ? (
+        <Section title="Weiterschauen">
+          <FlatList
+            horizontal
+            data={continueWatching}
+            keyExtractor={(v) => v.id}
+            renderItem={({ item }) => <ContinueTile video={item} />}
+            ItemSeparatorComponent={() => <View style={{ width: space.m }} />}
+            showsHorizontalScrollIndicator={false}
+            style={{ marginHorizontal: -space.l }}
+            contentContainerStyle={{ paddingHorizontal: space.l }}
+          />
+        </Section>
+      ) : null}
+
+      {!searching && bookmarks.list.length > 0 ? (
+        <Section title="Merkliste">
+          <View style={{ gap: space.s }}>
+            {bookmarks.list.map((b) => (
+              <LessonLink key={b.id} id={b.id} title={b.title} subtitle={`${b.categoryTitle} · ${kindLabel(b.kind, b.durationSec)}`} icon="bookmark" />
+            ))}
+          </View>
         </Section>
       ) : null}
 

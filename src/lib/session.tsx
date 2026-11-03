@@ -4,6 +4,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError, createApi, normalizeBaseUrl, type ApiClient } from './api';
+import { clearExerciseVideos } from './exercise-videos';
 import { getItem, removeItem, setItem } from './storage';
 import type { Bootstrap, LoginResponse, Me } from './types';
 import { clearRoutineWidget } from './widget';
@@ -59,6 +60,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMe(null);
     qc.clear();
     clearRoutineWidget();
+    clearExerciseVideos();
     await removeItem(TOKEN_KEY);
   }, [qc, tokens]);
 

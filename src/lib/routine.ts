@@ -290,7 +290,7 @@ export function savePhoto(tempUri: string, at = new Date()): ProgressPhoto {
   const pad = (n: number) => String(n).padStart(2, '0');
   const name = `${localDay(at)}_${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}.jpg`;
   const target = new File(photoDir(), name);
-  new File(tempUri).copy(target);
+  new File(tempUri).copySync(target);
   return { uri: target.uri, name, takenAt: at };
 }
 

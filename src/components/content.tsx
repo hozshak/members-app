@@ -81,7 +81,7 @@ export function ContinueTile({ video }: { video: VideoCard }) {
 
 const KIND_LABEL: Record<VideoCard['kind'], string> = { video: 'Video', video_text: 'Video', text: 'Text', pdf: 'PDF' };
 
-/** One lesson in a list: number or check, title, kind and length; locked lessons are not tappable. */
+/** One lesson in a list: its thumbnail, number or check, title, kind and length; locked lessons are not tappable. */
 export function LessonRow({ video, index }: { video: VideoCard; index: number }) {
   const p = usePalette();
   const open = useOpen();
@@ -93,16 +93,26 @@ export function LessonRow({ video, index }: { video: VideoCard; index: number })
       accessibilityLabel={`${video.title}${finished ? ', erledigt' : ''}`}
       style={{ flexDirection: 'row', alignItems: 'center', padding: space.m, gap: space.m, opacity: video.locked ? 0.55 : 1 }}
     >
-      <View
-        style={{
-          width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-          backgroundColor: finished ? p.accent : p.surfaceAlt,
-        }}
-      >
-        {finished
-          ? <Ionicons name="checkmark" size={18} color={p.onAccent} />
-          : <Txt variant="small" color={p.textMuted} style={{ fontWeight: '700' }}>{String(index)}</Txt>}
-      </View>
+      {video.thumbnailUrl ? (
+        <Cover url={video.thumbnailUrl} title={video.title} style={{ width: 104 }}>
+          <View style={{ position: 'absolute', left: 4, top: 4, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: finished ? p.accent : 'rgba(0,0,0,0.6)' }}>
+            {finished
+              ? <Ionicons name="checkmark" size={15} color={p.onAccent} />
+              : <Txt variant="small" color="#FFFFFF" style={{ fontWeight: '700', fontSize: 12, lineHeight: 16 }}>{String(index)}</Txt>}
+          </View>
+        </Cover>
+      ) : (
+        <View
+          style={{
+            width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: finished ? p.accent : p.surfaceAlt,
+          }}
+        >
+          {finished
+            ? <Ionicons name="checkmark" size={18} color={p.onAccent} />
+            : <Txt variant="small" color={p.textMuted} style={{ fontWeight: '700' }}>{String(index)}</Txt>}
+        </View>
+      )}
       <View style={{ flex: 1, gap: 2 }}>
         <Txt variant="heading" numberOfLines={2}>{video.title}</Txt>
         <Txt variant="small" muted>

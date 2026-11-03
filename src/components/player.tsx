@@ -8,13 +8,17 @@
 // While the video has to wait for data it says so ("Internet langsam – Video lädt …" after a moment). A lesson video can be
 // enlarged to the whole screen and back, also with a watermark (the watermark stays on the picture).
 // "Neu laden" gets a new address and goes on at the same place (a stuck stream, or another device took over the stream).
-// A lesson video starts by itself (`autoPlay`), pauses while another screen or tab is in front and goes on afterwards.
+// A lesson video starts by itself (`autoPlay`), pauses while another screen or tab is in front and goes on afterwards. Until
+// its first picture is there the video's thumbnail stands in (`posterUrl`).
 // Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, plays exactly while
 // `playing` is true (the countdown of the exercise), has buttons for "10 seconds back", "Neu laden" and sound instead of
-// controls; the parent learns the video's shape (onAspect), when it waits for data (onWaiting) and the stream's rules (onPlay).
+// controls; the parent learns the video's shape (onAspect) and when it waits for data (onWaiting).
 // A picture that stands still although it should play counts as waiting, and a stuck or failed video reloads by itself (at
-// most twice per stall). The parent may keep it mounted hidden with `playing` false: it loads ahead and is ready at once.
+// most twice per stall). With `file` (the video is on the phone, lib/exercise-videos.ts) it plays from there, whatever the
+// connection does; the server only adds the watermark, and the parent may keep it mounted hidden with `playing` false: it is
+// ready at once at its turn.
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useIsFocused } from 'expo-router';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
@@ -49,8 +53,12 @@ export interface LessonPlayerProps {
   onAspect?: (aspect: number) => void;
   /** coach: true while the video waits for data (first load or slow internet). */
   onWaiting?: (waiting: boolean) => void;
-  /** The answer of the server to the play request (e.g. `exclusive`). */
-  onPlay?: (play: PlayResponse) => void;
+  /** The video's thumbnail, shown until its first picture is there. */
+  posterUrl?: string | null;
+  /** The video as a file on the phone; read once, a player stays with its source (`key` for another one). */
+  file?: string | null;
+  /** The file does not play. */
+  onFileFailed?: () => void;
   /** coach: a very small picture (no button, no text). */
   mini?: boolean;
   /** coach: without sound. */
@@ -81,10 +89,15 @@ function logVideo(what: string, detail?: string): void {
 }
 
 export function LessonPlayer({
-  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, onPlay, mini = false, muted = false, onToggleMuted,
+  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false, muted = false, onToggleMuted,
 }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
+  const [localFile] = useState(file ?? null);
+  const fileFailed = useRef(onFileFailed);
+  useEffect(() => {
+    fileFailed.current = onFileFailed;
+  }, [onFileFailed]);
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const player = useVideoPlayer(null, (p) => {
@@ -100,6 +113,7 @@ export function LessonPlayer({
   const [play, setPlay] = useState<PlayResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [frozen, setFrozen] = useState(false);
+  const [firstFrame, setFirstFrame] = useState(false);
   const alive = useRef(true);
   const reloading = useRef(false);
   const autoReloads = useRef(0);
@@ -120,7 +134,9 @@ export function LessonPlayer({
   useEventListener(player, 'sourceLoad', ({ availableVideoTracks }) => takeSize(availableVideoTracks[0]?.size));
   useEventListener(player, 'videoTrackChange', ({ videoTrack }) => takeSize(videoTrack?.size));
   useEventListener(player, 'statusChange', (e) => {
-    if (e.status === 'error') logVideo('Fehler', e.error?.message);
+    if (e.status !== 'error') return;
+    logVideo('Fehler', e.error?.message);
+    if (localFile) fileFailed.current?.();
   });
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     seen.current = { pos: currentTime, dur: player.duration };
@@ -130,9 +146,6 @@ export function LessonPlayer({
   useEffect(() => {
     if (videoAspect) onAspect?.(videoAspect);
   }, [onAspect, videoAspect]);
-  useEffect(() => {
-    if (play) onPlay?.(play);
-  }, [onPlay, play]);
 
   const attach = useCallback(async (resp: PlayResponse, at: number, autoplay: boolean) => {
     await player.replaceAsync({ uri: api.url(resp.src), headers: api.mediaHeaders() });
@@ -152,11 +165,16 @@ export function LessonPlayer({
     setError(null);
     setFrozen(false);
     try {
-      const resp = await api.post<PlayResponse>(playPath);
-      if (!alive.current) return;
-      setPlay(resp);
-      // coach: `playing` starts it again as soon as it is loaded
-      await attach(resp, at, !coach && wasPlaying);
+      if (localFile) {
+        await player.replaceAsync({ uri: localFile });
+        if (alive.current && at > 0) seek(player, at);
+      } else {
+        const resp = await api.post<PlayResponse>(playPath);
+        if (!alive.current) return;
+        setPlay(resp);
+        // coach: `playing` starts it again as soon as it is loaded
+        await attach(resp, at, !coach && wasPlaying);
+      }
       if (alive.current) setLoaded(true);
     } catch (err) {
       logVideo('neu laden fehlgeschlagen', err instanceof Error ? err.message : undefined);
@@ -164,12 +182,27 @@ export function LessonPlayer({
     } finally {
       reloading.current = false;
     }
-  }, [api, attach, coach, playPath, player]);
+  }, [api, attach, coach, localFile, playPath, player]);
 
   // first token
   useEffect(() => {
     alive.current = true;
     void (async () => {
+      if (localFile) {
+        // from the phone at once; the answer of the server only brings the watermark (without a connection: none)
+        try {
+          await player.replaceAsync({ uri: localFile });
+          if (alive.current) setLoaded(true);
+        } catch {
+          if (alive.current) fileFailed.current?.();
+          return;
+        }
+        try {
+          const resp = await api.post<PlayResponse>(playPath);
+          if (alive.current) setPlay(resp);
+        } catch { /* see above */ }
+        return;
+      }
       try {
         const resp = await api.post<PlayResponse>(playPath);
         if (!alive.current) return;
@@ -182,7 +215,7 @@ export function LessonPlayer({
       }
     })();
     return () => { alive.current = false; };
-  }, [api, playPath, attach, coach]);
+  }, [api, playPath, attach, coach, localFile, player]);
 
   // lesson: starts by itself as soon as there is something to play (once, and only with the lesson in front)
   useEffect(() => {
@@ -232,9 +265,9 @@ export function LessonPlayer({
     else player.pause();
   }, [coach, loaded, playing, player]);
 
-  // a new token after renewAfterSec while playing (the old one would expire mid-video)
+  // a new token after renewAfterSec while playing (the old one would expire mid-video); a file needs none
   useEffect(() => {
-    if (!play || !isPlaying) return;
+    if (!play || !isPlaying || localFile) return;
     const t = setTimeout(() => {
       void (async () => {
         try {
@@ -247,7 +280,7 @@ export function LessonPlayer({
       })();
     }, Math.max(30, play.renewAfterSec) * 1000);
     return () => clearTimeout(t);
-  }, [api, attach, isPlaying, play, playPath, player]);
+  }, [api, attach, isPlaying, localFile, play, playPath, player]);
 
   const save = useCallback(async (completed = false) => {
     if (!progressPath) return;
@@ -330,6 +363,7 @@ export function LessonPlayer({
   };
 
   const wm = play?.watermark;
+  const showPoster = !!posterUrl && !firstFrame && !isPlaying && !failed;
   const waitingView = waiting ? (
     <View style={[StyleSheet.absoluteFill, styles.center, { gap: space.s, padding: space.s, backgroundColor: slow ? 'rgba(0,0,0,0.45)' : 'transparent' }]} pointerEvents="box-none">
       <ActivityIndicator color="#FFFFFF" />
@@ -354,8 +388,18 @@ export function LessonPlayer({
           surfaceType={coach ? 'textureView' : undefined}
           fullscreenOptions={{ enable: !wm?.enabled }}
           allowsPictureInPicture={false}
+          onFirstFrameRender={() => setFirstFrame(true)}
         />
       )}
+      {showPoster && posterUrl ? (
+        <Image
+          pointerEvents="none"
+          source={{ uri: api.url(posterUrl), headers: api.mediaHeaders() }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          accessibilityIgnoresInvertColors
+        />
+      ) : null}
       {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
       {waitingView}
       {coach && !mini && !failed ? (

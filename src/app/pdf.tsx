@@ -1,6 +1,6 @@
 // A PDF inside the app (owner 02.11.2026: "die PDF-Datei sollte man in der App öffnen können"). components/download.tsx has
-// loaded it into the phone's cache with the member's session; iOS shows it here with pinch to zoom, "Teilen" saves or
-// sends it. (Android's web view cannot show PDFs: there the phone's PDF viewer opens instead.) The copy goes away on close.
+// loaded it into the phone's cache with the member's session; iOS shows it here with pinch to zoom, the button at the top
+// saves or sends it. (Android's web view cannot show PDFs: there the phone's PDF viewer opens instead.) The copy goes away on close.
 import { Ionicons } from '@expo/vector-icons';
 import { File, Paths } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -33,11 +33,11 @@ export default function PdfScreen() {
         <Txt variant="heading" numberOfLines={1} style={{ flex: 1 }}>{title ?? 'PDF'}</Txt>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="PDF teilen oder speichern"
+          accessibilityLabel="PDF herunterladen oder teilen"
           hitSlop={12}
           onPress={() => void Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: title }).catch(() => undefined)}
         >
-          <Ionicons name="share-outline" size={24} color={p.accent} />
+          <Ionicons name="download-outline" size={24} color={p.accent} />
         </Pressable>
       </View>
       <WebView
