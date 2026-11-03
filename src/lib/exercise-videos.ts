@@ -1,10 +1,11 @@
-// The exercise videos of the routine live on the phone (owner 03.11.2026: "flüssig"): loaded once, then they play from the
-// file. Without a network during the exercise there is nothing left that can stall: no buffering, no new addresses, a clean
-// loop, and the server's limit per video and day (worker/modules/player/quota.ts) is touched only once.
+// Short exercise videos of the routine are kept on the phone: loaded once in the background, then they play from the file, start
+// at once and loop without touching the network or the server's limit per video and day (worker/modules/player/quota.ts). Longer
+// videos stream like a lesson (owner 03.11.2026: loading them first made the routine slower than the lessons), as does every
+// video that is not there yet: nobody waits for a file.
 // Loaded piece by piece, in the size the website's player asks for as well, one piece at a time and the current exercise
 // first; a broken connection or a closed screen loses nothing, the next visit goes on from there. A video replaced in the
-// admin has another ETag and is loaded again (the new file counts from the next session: a running one is never swapped). A
-// video that cannot be loaded stays available as a stream. In the browser (development only) the files are kept in memory.
+// admin has another ETag and is loaded again (the new file counts from the next session: a running one is never swapped). In the
+// browser (development only) the files are kept in memory.
 import { fetch } from 'expo/fetch';
 import { Directory, File, Paths } from 'expo-file-system';
 import { useEffect, useRef, useState, type RefObject } from 'react';
@@ -14,11 +15,10 @@ import type { PlayResponse } from './types';
 
 const MIB = 1024 * 1024;
 const PIECE_BYTES = 8 * MIB;
-/** The server refuses more than 128 MiB per minute and video (quota.ts), so a large video loads at most this fast. */
-const PIECE_EVERY_MS = 4800;
-const PACED_ABOVE_BYTES = 96 * MIB;
+/** Larger videos stream. Below the server's limit of 128 MiB per minute and video (quota.ts), so loading needs no brake. */
+const FILE_MAX_BYTES = 96 * MIB;
 /** The phone keeps this much, the videos not used for the longest time go first. */
-const KEEP_BYTES = 3 * 1024 * MIB;
+const KEEP_BYTES = 1024 * MIB;
 const MAX_FAILURES = 3;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); });
@@ -127,7 +127,7 @@ export function clearExerciseVideos(): void {
 // ---------- loading ----------
 
 /** One video on its way: the stream address, what it is and how far it is. */
-interface Job { url: string; expiresAt: number; size: number; version: string; offset: number; lastPieceAt: number }
+interface Job { url: string; expiresAt: number; size: number; version: string; offset: number }
 
 async function openJob(api: ApiClient, id: string): Promise<Job> {
   const play = await api.post<PlayResponse>(`/api/member/videos/${encodeURIComponent(id)}/play`);
@@ -139,7 +139,7 @@ async function openJob(api: ApiClient, id: string): Promise<Job> {
   const size = Number(/\/(\d+)$/.exec(first.headers.get('content-range') ?? '')?.[1] ?? 0);
   if (!size) throw new ApiError(0, 'no_size');
   const version = `${size}-${(first.headers.get('etag') ?? '').replace(/\W/g, '').slice(0, 20)}`;
-  return { url, expiresAt: play.expiresAt, size, version, offset: store.partSize(id, version), lastPieceAt: 0 };
+  return { url, expiresAt: play.expiresAt, size, version, offset: size > FILE_MAX_BYTES ? 0 : store.partSize(id, version) };
 }
 
 async function loadPiece(api: ApiClient, job: Job): Promise<Uint8Array> {
@@ -154,15 +154,10 @@ async function loadPiece(api: ApiClient, job: Job): Promise<Uint8Array> {
 export interface ExerciseVideos {
   /** The file of a video, when it is completely on the phone. */
   file(id: string): string | null;
-  /** How far a video is, 0…1. */
-  share(id: string): number;
-  /** It could not be loaded: it comes as a stream. */
+  /** Its file does not play: it comes as a stream. */
   failed(id: string): boolean;
   /** A file that does not play: away with it, the video comes as a stream. */
   drop(id: string): void;
-  /** All videos together, 0…1 (1 = nothing left to do). */
-  overall: number;
-  anyFailed: boolean;
 }
 
 /**
@@ -171,9 +166,7 @@ export interface ExerciseVideos {
  */
 export function useExerciseVideos(api: ApiClient, ids: readonly string[], current: string | null, paused: RefObject<boolean>): ExerciseVideos {
   const [files, setFiles] = useState<Record<string, string>>({});
-  const [shares, setShares] = useState<Record<string, number>>({});
   const [failed, setFailed] = useState<Record<string, boolean>>({});
-  const [done, setDone] = useState<Record<string, boolean>>({});
   const first = useRef(current);
   useEffect(() => {
     first.current = current;
@@ -187,10 +180,6 @@ export function useExerciseVideos(api: ApiClient, ids: readonly string[], curren
     const todo = new Set(list);
     const jobs = new Map<string, Job>();
     const failures = new Map<string, number>();
-    const finish = (id: string) => {
-      todo.delete(id);
-      setDone((d) => ({ ...d, [id]: true }));
-    };
     void (async () => {
       // what is on the phone is there at once (it is checked against the server afterwards)
       const known: Record<string, string> = {};
@@ -215,24 +204,20 @@ export function useExerciseVideos(api: ApiClient, ids: readonly string[], curren
             job = await openJob(api, id);
             jobs.set(id, job);
           }
-          if (store.has(id, job.version)) {
-            finish(id);
+          if (job.size > FILE_MAX_BYTES || store.has(id, job.version)) {
+            todo.delete(id);
             continue;
           }
-          if (job.size > PACED_ABOVE_BYTES) await sleep(job.lastPieceAt + PIECE_EVERY_MS - Date.now());
-          job.lastPieceAt = Date.now();
           const bytes = await loadPiece(api, job);
           if (stopped) return;
           await store.write(id, job.version, job.offset, bytes);
           job.offset += bytes.length;
           failures.delete(id);
-          const share = job.offset / job.size;
-          setShares((s) => ({ ...s, [id]: share }));
           if (job.offset >= job.size) {
             const uri = store.complete(id, job.version, list);
             // a running session keeps the file it has
             setFiles((f) => (f[id] ? f : { ...f, [id]: uri }));
-            finish(id);
+            todo.delete(id);
           }
         } catch (err) {
           if (stopped) return;
@@ -243,8 +228,7 @@ export function useExerciseVideos(api: ApiClient, ids: readonly string[], curren
           if (status === 403 || status === 409 || status === 416) jobs.delete(id);
           // 429: the limit of the day is used up, 404: the video is gone
           if (status === 429 || status === 404 || times >= MAX_FAILURES) {
-            setFailed((x) => ({ ...x, [id]: true }));
-            finish(id);
+            todo.delete(id);
           } else {
             await sleep(1500 * times);
           }
@@ -254,10 +238,8 @@ export function useExerciseVideos(api: ApiClient, ids: readonly string[], curren
     return () => { stopped = true; };
   }, [api, key, paused]);
 
-  const unique = key ? key.split(',') : [];
   return {
     file: (id) => files[id] ?? null,
-    share: (id) => shares[id] ?? 0,
     failed: (id) => !!failed[id],
     drop: (id) => {
       try {
@@ -266,7 +248,5 @@ export function useExerciseVideos(api: ApiClient, ids: readonly string[], curren
       setFiles(({ [id]: _gone, ...rest }) => rest);
       setFailed((x) => ({ ...x, [id]: true }));
     },
-    overall: unique.length === 0 ? 1 : unique.reduce((sum, id) => sum + (done[id] || files[id] ? 1 : (shares[id] ?? 0)), 0) / unique.length,
-    anyFailed: unique.some((id) => failed[id] && !files[id]),
   };
 }

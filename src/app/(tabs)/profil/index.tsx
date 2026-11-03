@@ -1,5 +1,5 @@
-// Profile overview: photo (tap to change or remove — chosen from the phone, cropped square, sent as a 512 px JPEG),
-// name, e-mail and member number; the settings in the app; legal pages of the community in the browser; log out;
+// Profile overview: photo (tap to change or remove — chosen from the phone, cropped square, sent as a 512 px JPEG) in a frame that gets
+// finer with the days practised (lib/frame.ts); name, e-mail and member number; the settings in the app; the introduction again; legal pages of the community in the browser; log out;
 // switch the community.
 import { router, type Href } from 'expo-router';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
@@ -10,7 +10,11 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, MenuGroup, MenuRow, Screen, Txt } from '@/components/ui';
+import { showIntro } from '@/components/intro-tour';
 import { errorText } from '@/lib/api';
+import { frameOf } from '@/lib/frame';
+import { overallStats } from '@/lib/plans';
+import { useRoutines } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { space, usePalette } from '@/lib/theme';
 
@@ -19,7 +23,10 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { me, community, api, logout, forgetCommunity, refreshMe } = useSession();
   const [busy, setBusy] = useState(false);
+  const routines = useRoutines();
   if (!community || !api) return null;
+  const hasRoutines = (routines.data?.length ?? 0) > 0;
+  const frame = frameOf(overallStats(routines.data));
   const name = me?.displayName || [me?.firstName, me?.lastName].filter(Boolean).join(' ') || me?.email || '';
 
   const pickPhoto = async () => {
@@ -60,13 +67,15 @@ export default function ProfileScreen() {
     <Screen contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <View style={{ gap: space.m, alignItems: 'flex-start' }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Profilfoto ändern" onPress={photoMenu}>
-          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            {me?.avatarUrl ? (
-              <Image source={{ uri: api.url(me.avatarUrl), headers: api.mediaHeaders() }} style={{ width: 80, height: 80 }} contentFit="cover" />
-            ) : (
-              <Txt variant="display" color={p.accent}>{(name.trim()[0] ?? '?').toLocaleUpperCase('de-DE')}</Txt>
-            )}
-            {busy ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }]}><ActivityIndicator color="#FFFFFF" /></View> : null}
+          <View style={{ width: 92, height: 92, borderRadius: 46, borderWidth: frame.width, borderColor: frame.color ?? p.line, padding: 2, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ flex: 1, alignSelf: 'stretch', borderRadius: 46, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              {me?.avatarUrl ? (
+                <Image source={{ uri: api.url(me.avatarUrl), headers: api.mediaHeaders() }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              ) : (
+                <Txt variant="display" color={p.accent}>{(name.trim()[0] ?? '?').toLocaleUpperCase('de-DE')}</Txt>
+              )}
+              {busy ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }]}><ActivityIndicator color="#FFFFFF" /></View> : null}
+            </View>
           </View>
           <Txt variant="small" color={p.accent} style={{ marginTop: space.xs, textAlign: 'center' }}>Foto ändern</Txt>
         </Pressable>
@@ -74,15 +83,23 @@ export default function ProfileScreen() {
           <Txt variant="display">{name}</Txt>
           {me?.email && me.email !== name ? <Txt muted>{me.email}</Txt> : null}
           <Txt variant="small" muted>Mitglied bei {community.name}{me?.memberNo ? ` · Nr. ${me.memberNo}` : ''}</Txt>
+          {hasRoutines ? (
+            <Txt variant="small" color={frame.color ?? p.textMuted} style={{ fontWeight: '700', marginTop: space.xs }}>
+              {frame.level === 0 ? 'Dein Rahmen' : `${frame.name}-Rahmen`}
+              {frame.next ? ` · noch ${frame.next.days === 1 ? '1 Übungstag' : `${frame.next.days} Übungstage`} bis ${frame.next.name}` : ''}
+            </Txt>
+          ) : null}
         </View>
       </View>
 
       <MenuGroup>
         <MenuRow icon="person-outline" label="Persönliche Daten" onPress={() => router.push('/profil/daten' as Href)} />
         <MenuRow icon="key-outline" label="Passwort ändern" onPress={() => router.push('/profil/passwort' as Href)} />
+        <MenuRow icon="alarm-outline" label="Erinnerungen" onPress={() => router.push('/profil/erinnerungen' as Href)} />
         <MenuRow icon="notifications-outline" label="Benachrichtigungen" onPress={() => router.push('/profil/benachrichtigungen' as Href)} />
         <MenuRow icon="phone-portrait-outline" label="Geräte" onPress={() => router.push('/profil/geraete' as Href)} />
         <MenuRow icon="bag-handle-outline" label="Meine Käufe" onPress={() => router.push('/profil/kaeufe' as Href)} />
+        <MenuRow icon="compass-outline" label="Einführung ansehen" onPress={showIntro} />
       </MenuGroup>
 
       <MenuGroup>

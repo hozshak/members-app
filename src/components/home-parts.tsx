@@ -12,7 +12,7 @@ import { mainRoutine, overallStats } from '@/lib/plans';
 import { useRoutines, type RoutineStats } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import type { CategoryCard, MemberProduct } from '@/lib/types';
-import { WeekStrip } from './routine-parts';
+import { TwoWeeks } from './routine-parts';
 import { Card, ProgressBar, Section, Txt } from './ui';
 
 export function DailyQuote() {
@@ -102,7 +102,7 @@ function RoutineProgress({ stats }: { stats: RoutineStats }) {
         <Figure value={String(stats.totalDays)} label={stats.totalDays === 1 ? 'Tag insgesamt' : 'Tage insgesamt'} />
         {reached ? <Figure value={`${Math.round(reached.share * 100)} %`} label="deines Ziels" /> : null}
       </View>
-      <WeekStrip days={stats.days} />
+      <TwoWeeks days={stats.days} />
       {goal && reached ? <Txt variant="small" muted numberOfLines={2}>{goal.text}: {reached.done} von {reached.target} Tagen</Txt> : null}
     </Card>
   );

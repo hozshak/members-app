@@ -1,6 +1,6 @@
-// Home: greeting, the quote of the day, today's routine (one tap to its start), where the member stands in the programmes
-// and the routine, then the buttons of the start page (e.g. "WhatsApp-Gruppe", "Bewertung abgeben" — as on the website).
-// The contents themselves are under "Inhalte".
+// Home: greeting with the buttons of the start page next to it (e.g. "WhatsApp-Gruppe", "Bewertung abgeben"), the quote of the day,
+// today's routine (one tap to its start) and where the member stands in the programmes and the routine. The contents themselves
+// are under "Inhalte".
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +28,8 @@ export default function HomeScreen() {
 
   return (
     <Screen onRefresh={() => void home.refetch()} refreshing={home.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
-      <View style={{ gap: space.s }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.m }}>
+      <View style={{ flex: 1, gap: space.s }}>
         {community?.logoUrl ? (
           <Image source={{ uri: community.logoUrl }} style={{ height: 28, width: 140 }} contentFit="contain" contentPosition="left" accessibilityLabel={community.name} />
         ) : (
@@ -36,14 +37,14 @@ export default function HomeScreen() {
         )}
         <Txt variant="display">{name ? `${greeting()}, ${name}` : greeting()}</Txt>
       </View>
+      {h.buttons && h.buttons.length > 0 ? <HomeButtons buttons={h.buttons} /> : null}
+      </View>
 
       <DailyQuote />
 
       <RoutineTodayCard />
 
       <ProgressOverview products={h.products} others={others} />
-
-      {h.buttons && h.buttons.length > 0 ? <HomeButtons buttons={h.buttons} /> : null}
 
       {empty ? (
         <View style={{ paddingVertical: space.xxl, gap: space.s }}>

@@ -119,6 +119,8 @@ export function useDayChecks(routineId: string) {
       const ids = current();
       write(ids.includes(stepId) ? ids.filter((id) => id !== stepId) : [...ids, stepId]);
     },
+    /** Exactly these exercises are ticked today. */
+    set: (ids: string[]) => write(ids),
     mark: (stepId: string) => {
       const ids = current();
       if (!ids.includes(stepId)) write([...ids, stepId]);

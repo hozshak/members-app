@@ -104,7 +104,7 @@ export function useReloadOnNewDay(): void {
 
 export interface PlanPhotos { start?: string; end?: string }
 /** The video that replaces an exercise for one day. */
-export interface SwappedExercise { videoId: string; title: string; thumbnailUrl: string | null }
+export interface SwappedExercise { videoId: string; title: string; thumbnailUrl: string | null; durationSec: number | null }
 
 interface Saved {
   photos: Record<string, PlanPhotos>;
@@ -169,14 +169,14 @@ export function useSwaps() {
 }
 const NO_SWAPS: Record<string, SwappedExercise> = {};
 
-/** The exercises of today with the swaps applied (title and video change, the length and the id stay). */
+/** The exercises of today with the swaps applied (title, video and its length change, the id stays). */
 export function withSwaps<T extends { steps: RoutineStep[] }>(routine: T, swaps: Record<string, SwappedExercise>): T {
   if (!routine.steps.some((s) => swaps[s.id])) return routine;
   return {
     ...routine,
     steps: routine.steps.map((s) => {
       const x = swaps[s.id];
-      return x ? { ...s, title: x.title, description: '', videoId: x.videoId, videoTitle: x.title, videoThumbnailUrl: x.thumbnailUrl, videoAvailable: true } : s;
+      return x ? { ...s, title: x.title, description: '', videoId: x.videoId, videoTitle: x.title, videoThumbnailUrl: x.thumbnailUrl, videoAvailable: true, videoDurationSec: x.durationSec } : s;
     }),
   };
 }

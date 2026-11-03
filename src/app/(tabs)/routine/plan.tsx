@@ -16,7 +16,7 @@ import { useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { clearPlanPhotos, goalLabel, planLabel, planState, usePlanPhotos, usePlanStart, useSwaps, withSwaps } from '@/lib/plans';
-import { listPhotos, scaledDuration, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineStep } from '@/lib/routine';
+import { listPhotos, stepSeconds, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineStep } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import { useZones, type MemberZoneExercise } from '@/lib/zones';
 
@@ -61,7 +61,6 @@ function GoalChoice({ days, longDays, value, onChange }: { days: number; longDay
 /** One exercise of today: its picture, title, length and, in a zone plan, "Andere Übung". */
 function ExerciseRow({ step, swapped, onSwap, onRestore }: { step: RoutineStep; swapped: boolean; onSwap?: () => void; onRestore: () => void }) {
   const p = usePalette();
-  const [prefs] = useRoutinePrefs();
   return (
     <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
       {step.videoThumbnailUrl ? (
@@ -73,7 +72,7 @@ function ExerciseRow({ step, swapped, onSwap, onRestore }: { step: RoutineStep; 
       )}
       <View style={{ flex: 1, gap: 2 }}>
         <Txt variant="heading" numberOfLines={2}>{step.title}</Txt>
-        <Txt variant="small" muted>{clock(scaledDuration(step.durationSec, prefs.length))}{swapped ? ' · Für heute getauscht' : ''}</Txt>
+        <Txt variant="small" muted>{clock(stepSeconds(step))}{swapped ? ' · Für heute getauscht' : ''}</Txt>
       </View>
       {swapped ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`${step.title}: zurück zur Übung aus dem Plan`} hitSlop={8} onPress={onRestore}>
@@ -175,12 +174,12 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   });
   const restart = () => Alert.alert(
     'Von vorne beginnen?',
-    'Heute ist dann wieder Tag 1. Deine erledigten Tage bleiben in deiner Serie.',
+    'Heute ist dann wieder Tag 1. Deine erledigten Tage bleiben erhalten.',
     [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Neu starten', style: 'destructive', onPress: () => plan.start.mutate(undefined, { onSuccess: () => { clearPlanPhotos(routine.id); if (Platform.OS !== 'web') camera(routine.id, 'start'); } }) }],
   );
   const leave = () => Alert.alert(
     'Plan beenden?',
-    'Deine erledigten Tage bleiben in deiner Serie. Du kannst den Plan jederzeit neu starten.',
+    'Deine erledigten Tage bleiben erhalten. Du kannst den Plan jederzeit neu starten.',
     [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Beenden', style: 'destructive', onPress: () => plan.leave.mutate(undefined, { onSuccess: () => router.back() }) }],
   );
 
@@ -239,7 +238,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
               <Button label="Foto machen" kind="secondary" onPress={() => camera(routine.id, 'start')} style={{ minHeight: 40, paddingHorizontal: space.m }} />
             </Card>
           ) : null}
-          <Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')} · {minutes(today.steps.reduce((sum, s) => sum + scaledDuration(s.durationSec, prefs.length), 0))}</Txt>}>
+          <Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')} · {minutes(today.steps.reduce((sum, s) => sum + stepSeconds(s), 0))}</Txt>}>
             <View style={{ gap: space.s }}>
               {today.steps.map((s) => (
                 <ExerciseRow
@@ -292,7 +291,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
           exercises={exercises}
           onClose={() => setSwapping(null)}
           onPick={(x) => {
-            swaps.swap(swapping, { videoId: x.videoId, title: x.title, thumbnailUrl: x.thumbnailUrl });
+            swaps.swap(swapping, { videoId: x.videoId, title: x.title, thumbnailUrl: x.thumbnailUrl, durationSec: x.durationSec });
             setSwapping(null);
           }}
         />

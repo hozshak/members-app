@@ -1,5 +1,5 @@
-// Small pieces shared by the routine screens: the progress ring, the length picker (Kurz / Normal / Lang), the minutes of a
-// zone session, this week as a row of days, "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a card for the start page.
+// Small pieces shared by the routine screens: the progress ring, the minutes of a
+// zone session, the last 14 days, "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a card for the start page.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -8,12 +8,11 @@ import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
-import { LENGTH_LABEL, scaledDuration, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineLength } from '@/lib/routine';
+import { stepSeconds, useRoutines, type MemberRoutine, type RoutineChallenge } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
 import { Card, Section, Txt } from './ui';
 
-const LENGTHS: RoutineLength[] = ['short', 'normal', 'long'];
 const WEEKDAY = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
 
 /** The way into a routine: its start screen. */
@@ -22,9 +21,8 @@ export const openRoutine = (id: string) => router.push(`/routine/${encodeURIComp
 /** The page of a plan (goal, today's exercises, photos). */
 export const openPlan = (id: string) => router.push({ pathname: '/routine/plan', params: { id } } as unknown as Href);
 
-/** Total seconds of a routine at a length. */
-export const routineSeconds = (routine: MemberRoutine, length: RoutineLength) =>
-  routine.steps.reduce((sum, s) => sum + scaledDuration(s.durationSec, length), 0);
+/** Total seconds of a routine. */
+export const routineSeconds = (routine: MemberRoutine) => routine.steps.reduce((sum, s) => sum + stepSeconds(s), 0);
 
 export function ProgressRing({ size, share, stroke = 12, track, children }: { size: number; share: number; stroke?: number; track?: string; children?: ReactNode }) {
   const p = usePalette();
@@ -42,29 +40,6 @@ export function ProgressRing({ size, share, stroke = 12, track, children }: { si
         </Svg>
       </View>
       {children}
-    </View>
-  );
-}
-
-export function LengthPicker({ value, onChange, totalFor }: { value: RoutineLength; onChange: (l: RoutineLength) => void; totalFor: (l: RoutineLength) => number }) {
-  const p = usePalette();
-  return (
-    <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', backgroundColor: p.surface, borderRadius: radius.l, padding: 4, gap: 4 }}>
-      {LENGTHS.map((l) => {
-        const on = l === value;
-        return (
-          <Pressable
-            key={l}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            onPress={() => onChange(l)}
-            style={{ flex: 1, alignItems: 'center', paddingVertical: space.s, borderRadius: radius.m, backgroundColor: on ? p.accent : 'transparent' }}
-          >
-            <Txt variant="heading" color={on ? p.onAccent : p.text}>{LENGTH_LABEL[l]}</Txt>
-            <Txt variant="small" color={on ? p.onAccent : p.textMuted}>{minutes(totalFor(l))}</Txt>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }
@@ -135,38 +110,55 @@ export function ZonesSection() {
   );
 }
 
-/** Monday to Sunday of this week: done days filled, today outlined. */
-export function WeekStrip({ days }: { days: readonly string[] }) {
+/**
+ * 14 days at a glance, done days filled, today outlined: during a plan its current 14 days, numbered by the day of the plan;
+ * otherwise last week and this week, Monday to Sunday.
+ */
+export function TwoWeeks({ days, plan }: { days: readonly string[]; plan?: RoutineChallenge | null }) {
   const p = usePalette();
   const done = new Set(days);
-  const now = new Date();
-  now.setHours(12, 0, 0, 0);
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  const today = localDay(now);
+  const today = localDay();
+  const now = new Date(`${today}T12:00:00`);
+  const shift = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12);
+  const inPlan = !!plan?.startDay && plan.dayNumber !== null;
+  // the block of 14 days the plan is in, or the Monday of last week
+  const offset = inPlan ? Math.floor(((plan.dayNumber as number) - 1) / 14) * 14 : 0;
+  const first = inPlan ? shift(new Date(`${plan.startDay}T12:00:00`), offset) : shift(now, -((now.getDay() + 6) % 7) - 7);
+  const cells = Array.from({ length: 14 }, (_, i) => {
+    const d = shift(first, i);
+    return { key: localDay(d), label: inPlan ? offset + i + 1 : d.getDate() };
+  });
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-      {WEEKDAY.map((label, i) => {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        const key = localDay(d);
-        const isDone = done.has(key);
-        const isToday = key === today;
-        return (
-          <View key={key} style={{ alignItems: 'center', gap: 4 }}>
-            <View
-              accessibilityLabel={`${key}${isDone ? ', erledigt' : ''}`}
-              style={{
-                width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-                backgroundColor: isDone ? p.accent : p.surface, borderWidth: isToday && !isDone ? 2 : 0, borderColor: p.accent,
-              }}
-            >
-              {isDone ? <Ionicons name="checkmark" size={18} color={p.onAccent} /> : null}
-            </View>
-            <Txt variant="small" muted style={isToday ? { fontWeight: '700' } : undefined}>{label}</Txt>
-          </View>
-        );
-      })}
+    <View style={{ gap: space.xs }}>
+      {inPlan ? null : (
+        <View style={{ flexDirection: 'row' }}>
+          {WEEKDAY.map((label, i) => <Txt key={i} variant="small" muted style={{ flex: 1, textAlign: 'center' }}>{label}</Txt>)}
+        </View>
+      )}
+      {[cells.slice(0, 7), cells.slice(7)].map((row, r) => (
+        <View key={r} style={{ flexDirection: 'row' }}>
+          {row.map((c) => {
+            const isDone = done.has(c.key);
+            const isToday = c.key === today;
+            const future = c.key > today;
+            return (
+              <View key={c.key} style={{ flex: 1, alignItems: 'center', paddingVertical: 3 }}>
+                <View
+                  accessibilityLabel={`${c.key}${isDone ? ', erledigt' : ''}`}
+                  style={{
+                    width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', opacity: future ? 0.45 : 1,
+                    backgroundColor: isDone ? p.accent : p.surface, borderWidth: isToday && !isDone ? 2 : 0, borderColor: p.accent,
+                  }}
+                >
+                  {isDone
+                    ? <Ionicons name="checkmark" size={18} color={p.onAccent} />
+                    : <Txt variant="small" muted style={{ fontVariant: ['tabular-nums'], fontWeight: isToday ? '700' : '400' }}>{c.label}</Txt>}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
@@ -175,7 +167,6 @@ export function WeekStrip({ days }: { days: readonly string[] }) {
 export function RoutineTodayCard() {
   const p = usePalette();
   const q = useRoutines();
-  const [prefs] = useRoutinePrefs();
   const routine = mainRoutine(q.data);
   if (!routine || routine.steps.length === 0) return null;
   const done = routine.stats.doneToday;
@@ -195,7 +186,7 @@ export function RoutineTodayCard() {
         <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
         <Txt variant="small" muted>
           {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
-          {plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}
+          {plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine))}
           {streak > 0 ? ` · ${plural(streak, 'Tag', 'Tage')} in Folge` : ''}
         </Txt>
       </View>

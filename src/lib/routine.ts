@@ -1,13 +1,14 @@
 // The daily routine (app only): the routines of the community with the member's streak (GET /api/member/routines of
-// the software, worker/modules/player/routines.ts), marking a day done, the daily reminder (a local notification of the
-// phone — no server involved) and the progress photos (stored ONLY on the phone, in the app's own folder; never
+// the software, worker/modules/player/routines.ts), marking a day done or opening it again, the daily reminder (a local notification
+// of the phone — no server involved) and the progress photos (stored ONLY on the phone, in the app's own folder; never
 // uploaded).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import { AndroidImportance } from 'expo-notifications';
+import { router, type Href } from 'expo-router';
 import { Platform } from 'react-native';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { ApiError } from './api';
 import { localDay } from './nav';
 import { useApi } from './session';
@@ -20,6 +21,8 @@ export interface RoutineStats { doneToday: boolean; streak: number; bestStreak: 
 export interface RoutineStep {
   id: Id; title: string; description: string; durationSec: number; videoId: Id | null;
   videoTitle: string | null; videoThumbnailUrl: string | null; videoAvailable: boolean;
+  /** The length of the video; missing on older versions of the software. */
+  videoDurationSec?: number | null;
 }
 /** A routine with its own exercises per day (shared/types.ts MemberRoutinePlan, lib/plans.ts): `steps` are then those of today. */
 export interface MemberRoutinePlan {
@@ -64,7 +67,8 @@ export function useCheckIn(routineId: Id) {
       type Answer = { stats: RoutineStats; challenge?: RoutineChallenge | null };
       return done ? await api.put<Answer>(path) : await api.del<Answer>(path);
     },
-    onSuccess: ({ stats, challenge }) => {
+    onSuccess: ({ stats, challenge }, done) => {
+      if (done) void cancelSnooze();
       qc.setQueryData<MemberRoutine[]>(routineKey, (list) => list?.map((r) => (
         r.id === routineId ? { ...r, stats, ...(challenge !== undefined ? { challenge } : {}) } : r
       )));
@@ -91,34 +95,27 @@ export function useChallenge(routineId: Id) {
 
 // ---------- settings of the routine (this phone only) ----------
 
-/** Routine length: the steps' durations scaled (each at least 5 s, rounded to 5 s). */
-export type RoutineLength = 'short' | 'normal' | 'long';
-export const LENGTH_FACTOR: Record<RoutineLength, number> = { short: 0.6, normal: 1, long: 1.5 };
-export const LENGTH_LABEL: Record<RoutineLength, string> = { short: 'Kurz', normal: 'Normal', long: 'Lang' };
-
-export function scaledDuration(sec: number, length: RoutineLength): number {
-  if (length === 'normal') return sec;
-  return Math.max(5, Math.round((sec * LENGTH_FACTOR[length]) / 5) * 5);
+/** How long an exercise runs: as long as its video; without a video the time set in the admin. */
+export function stepSeconds(step: Pick<RoutineStep, 'durationSec' | 'videoAvailable' | 'videoDurationSec'>): number {
+  return step.videoAvailable && step.videoDurationSec ? step.videoDurationSec : step.durationSec;
 }
 
 export interface RoutinePrefs {
   /** Daily reminder at a fixed time. */
   reminder: boolean; hour: number; minute: number;
-  /** "Serie retten": at this time, when the routine of the day is still open. */
-  rescue: boolean; rescueHour: number; rescueMinute: number;
   /** A photo reminder once a week: weekday 1 = Sunday … 7 = Saturday. */
   photoReminder: boolean; photoWeekday: number; photoHour: number; photoMinute: number;
   /** The progress photos need Face ID / the phone's code. */
   photoLock: boolean;
-  /** In the routine: front camera as a mirror, small sounds, length. */
-  mirror: boolean; sound: boolean; length: RoutineLength;
+  /** In the routine: front camera as a mirror, small sounds. */
+  mirror: boolean; sound: boolean;
   /** The exercise video next to the mirror (on by default), and whether it plays without sound. */
   video: boolean; videoMuted: boolean;
 }
 const PREFS_KEY = 'members.routine';
 export const DEFAULT_PREFS: RoutinePrefs = {
-  reminder: false, hour: 8, minute: 0, rescue: false, rescueHour: 20, rescueMinute: 0, photoReminder: false, photoWeekday: 1, photoHour: 10, photoMinute: 0,
-  photoLock: false, mirror: false, sound: true, length: 'normal', video: true, videoMuted: false,
+  reminder: false, hour: 8, minute: 0, photoReminder: false, photoWeekday: 1, photoHour: 10, photoMinute: 0,
+  photoLock: false, mirror: false, sound: true, video: true, videoMuted: false,
 };
 
 /** Weekdays in the order of the week, numbered as the reminders need them (1 = Sunday). */
@@ -176,8 +173,12 @@ export function useRoutinePrefs(): [RoutinePrefs, (patch: Partial<RoutinePrefs>)
 const CHANNEL = 'routine';
 const DAILY_ID = 'routine-daily';
 const PHOTO_ID = 'photo-weekly';
+/** "Serie retten" is gone (03.11.2026): what an older version scheduled is removed. */
 const RESCUE_PREFIX = 'rescue-';
-const RESCUE_DAYS = 7;
+const SNOOZE_ID = 'routine-snooze';
+/** The daily reminder can be moved from the notification itself; a tap on a button opens the app, which schedules it again. */
+const REMINDER_CATEGORY = 'routine-reminder';
+const SNOOZE_ACTION = /^snooze-(\d+)$/;
 
 /** Asks for the permission (Android: after creating the channel). False = not allowed. */
 export async function allowNotifications(): Promise<boolean> {
@@ -193,22 +194,23 @@ async function cancelPrefix(prefix: string): Promise<void> {
   await Promise.all(all.filter((n) => n.identifier.startsWith(prefix)).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
 }
 
-/**
- * Brings the scheduled notifications in line with the settings: the daily reminder, the weekly photo reminder and
- * "Serie retten" for the next days (today's only while the routine of today is still open).
- */
-export async function syncReminders(prefs: RoutinePrefs, routine: { title: string; stats: RoutineStats } | null): Promise<void> {
+/** Brings the scheduled notifications in line with the settings: the daily reminder and the weekly photo reminder. */
+export async function syncReminders(prefs: RoutinePrefs, routine: { title: string } | null): Promise<void> {
   if (Platform.OS === 'web') return;
   await Notifications.cancelScheduledNotificationAsync(DAILY_ID).catch(() => undefined);
   await Notifications.cancelScheduledNotificationAsync(PHOTO_ID).catch(() => undefined);
   await cancelPrefix(RESCUE_PREFIX);
-  const anything = (prefs.reminder || prefs.rescue) && routine !== null || prefs.photoReminder;
+  const anything = (prefs.reminder && routine !== null) || prefs.photoReminder;
   if (!anything || !(await Notifications.getPermissionsAsync()).granted) return;
 
   if (prefs.reminder && routine) {
+    await Notifications.setNotificationCategoryAsync(REMINDER_CATEGORY, [
+      { identifier: 'snooze-60', buttonTitle: 'In 1 Stunde', options: { opensAppToForeground: true } },
+      { identifier: 'snooze-180', buttonTitle: 'In 3 Stunden', options: { opensAppToForeground: true } },
+    ]);
     await Notifications.scheduleNotificationAsync({
       identifier: DAILY_ID,
-      content: { title: 'Zeit für deine Routine', body: `${routine.title} – ein paar Minuten nur für dich.` },
+      content: { title: 'Zeit für deine Routine', body: `${routine.title} – ein paar Minuten nur für dich.`, categoryIdentifier: REMINDER_CATEGORY },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: prefs.hour, minute: prefs.minute, channelId: CHANNEL },
     });
   }
@@ -219,49 +221,39 @@ export async function syncReminders(prefs: RoutinePrefs, routine: { title: strin
       trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: prefs.photoWeekday, hour: prefs.photoHour, minute: prefs.photoMinute, channelId: CHANNEL },
     });
   }
-  if (prefs.rescue && routine) {
-    const now = new Date();
-    for (let i = 0; i < RESCUE_DAYS; i++) {
-      const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, prefs.rescueHour, prefs.rescueMinute, 0);
-      if (at <= now) continue;
-      if (i === 0 && routine.stats.doneToday) continue;
-      const streak = i === 0 ? routine.stats.streak : 0;
-      await Notifications.scheduleNotificationAsync({
-        identifier: `${RESCUE_PREFIX}${localDay(at)}`,
-        content: {
-          title: streak > 1 ? `Deine Serie von ${streak} Tagen wartet` : 'Heute schon an dich gedacht?',
-          body: `${routine.title} dauert nur ein paar Minuten – mach sie noch heute.`,
-        },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at, channelId: CHANNEL },
-      });
-    }
-  }
 }
 
-/** Today's routine is done: no "Serie retten" for today. */
-export async function cancelTodaysRescue(): Promise<void> {
+/** The routine is done: a moved reminder has nothing left to say. */
+async function cancelSnooze(): Promise<void> {
   if (Platform.OS === 'web') return;
-  await Notifications.cancelScheduledNotificationAsync(`${RESCUE_PREFIX}${localDay()}`).catch(() => undefined);
+  await Notifications.cancelScheduledNotificationAsync(SNOOZE_ID).catch(() => undefined);
 }
 
-// ---------- badges (from the stats; nothing stored) ----------
-
-export interface Badge { id: string; label: string; detail: string; earned: boolean; icon: 'flame' | 'trophy' | 'star' | 'ribbon' }
-
-export function badgesOf(stats: RoutineStats): Badge[] {
-  const streak = [3, 7, 14, 30, 60, 100].map((n) => ({
-    id: `streak-${n}`, label: `${n} Tage`, detail: `${n} Tage in Folge`, earned: stats.bestStreak >= n, icon: n >= 30 ? 'trophy' as const : 'flame' as const,
-  }));
-  const total = [10, 50, 100, 365].map((n) => ({
-    id: `total-${n}`, label: `${n}×`, detail: `${n} Tage insgesamt`, earned: stats.totalDays >= n, icon: n >= 100 ? 'ribbon' as const : 'star' as const,
-  }));
-  return [...streak, ...total];
-}
-
-/** Badges earned by this check-in (compared with the stats before). */
-export function newBadges(before: RoutineStats | undefined, after: RoutineStats): Badge[] {
-  const had = new Set(before ? badgesOf(before).filter((b) => b.earned).map((b) => b.id) : []);
-  return badgesOf(after).filter((b) => b.earned && !had.has(b.id));
+/** A button of the reminder ("In 1 Stunde"): the same notification again later. A tap on the notification itself opens the routine. */
+export function useReminderActions(): void {
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const handle = (response: Notifications.NotificationResponse) => {
+      const minutes = SNOOZE_ACTION.exec(response.actionIdentifier)?.[1];
+      if (minutes) {
+        const { title, body } = response.notification.request.content;
+        void Notifications.scheduleNotificationAsync({
+          identifier: SNOOZE_ID,
+          content: { title, body, categoryIdentifier: REMINDER_CATEGORY },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(Date.now() + Number(minutes) * 60_000), channelId: CHANNEL },
+        });
+      }
+      router.navigate('/routine' as Href);
+    };
+    const sub = Notifications.addNotificationResponseReceivedListener(handle);
+    // the app was closed: the answer that started it
+    void Notifications.getLastNotificationResponseAsync().then((last) => {
+      if (!last) return;
+      handle(last);
+      void Notifications.clearLastNotificationResponseAsync();
+    });
+    return () => sub.remove();
+  }, []);
 }
 
 // ---------- progress photos (only on this phone) ----------

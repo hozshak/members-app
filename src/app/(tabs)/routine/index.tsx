@@ -1,59 +1,31 @@
-// Routine overview, the most important first: today's routine with the big start button, today's progress and this week
-// at a glance; the plans under way ("Von Mailin empfohlen", zones); the exercises to tick off (all ticked = day done); the member's own goal ("Mein Ziel" with a progress bar
-// and a forecast); "Gezielt üben" (short sessions by zone); a challenge when the coach made the routine one ("Tag 12 von 30"); the streak with the last five weeks
-// and a share picture, the badges, the progress photos (optionally behind Face ID) and the reminders. The length is chosen
-// on the start screen of the routine. Several routines follow as small cards; streak and badges belong to the first.
+// Routine overview, the most important first: today's routine with the big start button, how far today and the last 14 days at
+// a glance; the plans under way ("Von Mailin empfohlen", zones); the exercises to tick off (all ticked = day done, unticking or
+// "Zurücksetzen" opens the day again); the progress photos (optionally behind Face ID); "Gezielt üben" (plans and short sessions
+// by zone); the member's own goal ("Mein Ziel" with a progress bar and a forecast); a challenge when the coach made the routine one
+// ("Tag 12 von 30"). The reminders are under "Profil".
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useShareCard } from '@/components/share-card';
-import { openPlan, openRoutine, ProgressRing, routineSeconds, WeekStrip, ZonesSection } from '@/components/routine-parts';
-import { Button, Card, ErrorView, Field, Loading, MenuGroup, ProgressBar, Screen, Section, ToggleRow, Txt } from '@/components/ui';
+import { openPlan, openRoutine, ProgressRing, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
+import { Button, Card, ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
-import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
 import {
-  allowNotifications, badgesOf, cancelTodaysRescue, clockTime, listPhotos, newBadges, REMINDER_DAYS, scaledDuration, syncReminders, useChallenge, useCheckIn,
-  useRoutinePrefs, useRoutines,
-  type MemberRoutine, type ProgressPhoto, type RoutinePrefs,
+  listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
+  type MemberRoutine, type ProgressPhoto, type RoutineStats,
 } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 
-const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-
-/** The last five weeks (Monday to Sunday) ending with this week, as YYYY-MM-DD; days after today are null. */
-function calendarWeeks(today = new Date()): (string | null)[][] {
-  const start = new Date(today);
-  start.setHours(12, 0, 0, 0);
-  const weekday = (start.getDay() + 6) % 7; // Monday = 0
-  start.setDate(start.getDate() - weekday - 28);
-  const todayKey = localDay(today);
-  const weeks: (string | null)[][] = [];
-  for (let w = 0; w < 5; w++) {
-    const week: (string | null)[] = [];
-    for (let d = 0; d < 7; d++) {
-      const day = new Date(start);
-      day.setDate(start.getDate() + w * 7 + d);
-      const key = localDay(day);
-      week.push(key > todayKey ? null : key);
-    }
-    weeks.push(week);
-  }
-  return weeks;
-}
-
-
 /** "Mein Ziel": the goal in the member's words, a big bar (routine days done of those needed), this week as dots and a
  *  sentence that says how close it is ("Bleib dran: So erreichst du dein Ziel am 24. November."). */
-function GoalCard({ routine }: { routine: MemberRoutine }) {
+function GoalCard({ stats }: { stats: RoutineStats }) {
   const p = usePalette();
   const [goal] = useGoal();
   if (!goal) {
@@ -72,7 +44,7 @@ function GoalCard({ routine }: { routine: MemberRoutine }) {
       </Card>
     );
   }
-  const g = goalProgress(goal, routine.stats);
+  const g = goalProgress(goal, stats);
   return (
     <Card style={{ padding: space.l, gap: space.m }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
@@ -96,59 +68,57 @@ function GoalCard({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** Today's exercises to tick off; all ticked = the day is done (saved like after the timer). */
+/** Today's exercises to tick off; all ticked = the day is done. Unticking one, or "Zurücksetzen", opens the day again. */
 function TodayChecklist({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const checks = useDayChecks(routine.id);
   const checkIn = useCheckIn(routine.id);
-  const [prefs] = useRoutinePrefs();
   const doneToday = routine.stats.doneToday;
   const ticked = routine.steps.filter((s) => doneToday || checks.isDone(s.id)).length;
 
   const toggle = (stepId: string) => {
-    if (doneToday) return;
+    if (doneToday) {
+      // the day was done: this exercise opens, the others stay ticked
+      checks.set(routine.steps.filter((s) => s.id !== stepId).map((s) => s.id));
+      checkIn.mutate(false);
+      return;
+    }
     const willBe = new Set(checks.done);
     if (willBe.has(stepId)) willBe.delete(stepId);
     else willBe.add(stepId);
     checks.toggle(stepId);
-    if (routine.steps.every((s) => willBe.has(s.id)) && !checkIn.isPending) {
-      const before = routine.stats;
-      checkIn.mutate(true, {
-        onSuccess: ({ stats }) => {
-          void cancelTodaysRescue();
-          const earned = newBadges(before, stats);
-          Alert.alert(
-            'Tag geschafft!',
-            `${stats.streak === 1 ? 'Tag 1 deiner Serie.' : `${stats.streak} Tage in Folge.`}${earned.length ? `\nNeues Abzeichen: ${earned.map((b) => b.detail).join(', ')}` : ''}`,
-          );
-        },
-      });
-    }
+    if (routine.steps.every((s) => willBe.has(s.id)) && !checkIn.isPending) checkIn.mutate(true);
+  };
+  const reset = () => {
+    checks.set([]);
+    if (doneToday) checkIn.mutate(false);
   };
 
   return (
     <Section title="Heute abhaken" action={<Txt variant="small" muted>{ticked} von {routine.steps.length}</Txt>}>
       <View style={{ gap: space.s }}>
-      {routine.steps.map((s, i) => {
-        const on = doneToday || checks.isDone(s.id);
-        return (
-          <Pressable
-            key={s.id}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: on, disabled: doneToday }}
-            accessibilityLabel={s.title}
-            onPress={() => toggle(s.id)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, paddingVertical: space.s, paddingHorizontal: space.m, minHeight: 48, borderRadius: radius.m, backgroundColor: p.surface }}
-          >
-            <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-              {on ? <Ionicons name="checkmark" size={16} color={p.onAccent} /> : null}
-            </View>
-            <Txt variant="heading" style={{ flex: 1, textDecorationLine: on ? 'line-through' : 'none', opacity: on ? 0.6 : 1 }} numberOfLines={2}>{i + 1}. {s.title}</Txt>
-            <Txt variant="small" muted>{clock(scaledDuration(s.durationSec, prefs.length))}</Txt>
-          </Pressable>
-        );
-      })}
+        {routine.steps.map((s, i) => {
+          const on = doneToday || checks.isDone(s.id);
+          return (
+            <Pressable
+              key={s.id}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={s.title}
+              onPress={() => toggle(s.id)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, paddingVertical: space.s, paddingHorizontal: space.m, minHeight: 48, borderRadius: radius.m, backgroundColor: p.surface }}
+            >
+              <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                {on ? <Ionicons name="checkmark" size={16} color={p.onAccent} /> : null}
+              </View>
+              <Txt variant="heading" style={{ flex: 1, textDecorationLine: on ? 'line-through' : 'none', opacity: on ? 0.6 : 1 }} numberOfLines={2}>{i + 1}. {s.title}</Txt>
+              <Txt variant="small" muted>{clock(stepSeconds(s))}</Txt>
+            </Pressable>
+          );
+        })}
       </View>
+      {checkIn.isError ? <Txt variant="small" color={p.danger}>{errorText(checkIn.error)}</Txt> : null}
+      {ticked > 0 ? <Button label={doneToday ? 'Zurücksetzen: Heute ist noch nicht erledigt' : 'Häkchen zurücksetzen'} kind="ghost" onPress={reset} /> : null}
     </Section>
   );
 }
@@ -159,7 +129,7 @@ function ChallengeBlock({ routine }: { routine: MemberRoutine }) {
   const mutate = useChallenge(routine.id);
   if (!ch) return null;
   const started = ch.startDay !== null && ch.dayNumber !== null;
-  const leave = () => Alert.alert('Challenge verlassen?', 'Deine erledigten Tage bleiben in deiner Serie. Du kannst jederzeit neu starten.', [
+  const leave = () => Alert.alert('Challenge verlassen?', 'Deine erledigten Tage bleiben erhalten. Du kannst jederzeit neu starten.', [
     { text: 'Abbrechen', style: 'cancel' },
     { text: 'Verlassen', style: 'destructive', onPress: () => mutate.mutate(false) },
   ]);
@@ -215,10 +185,9 @@ function PlanCard({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** Today's routine: what, how long, how far today, this week, and the way in. */
+/** Today's routine: what, how long, how far today, the last 14 days, and the way in. */
 function TodayHero({ routine, days }: { routine: MemberRoutine; days: string[] }) {
   const p = usePalette();
-  const [prefs] = useRoutinePrefs();
   const checks = useDayChecks(routine.id);
   const done = routine.stats.doneToday;
   const state = routine.plan ? planState(routine) : null;
@@ -232,318 +201,19 @@ function TodayHero({ routine, days }: { routine: MemberRoutine; days: string[] }
           <Txt variant="title">{routine.title}</Txt>
           <Txt muted>
             {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
-            {plural(total, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}
+            {plural(total, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine))}
           </Txt>
         </View>
         <ProgressRing size={76} share={ticked / Math.max(1, total)} stroke={8} track={p.surface}>
           {done ? <Ionicons name="checkmark" size={32} color={p.accent} /> : <Txt variant="heading" style={{ fontVariant: ['tabular-nums'] }}>{ticked}/{total}</Txt>}
         </ProgressRing>
       </View>
-      <WeekStrip days={days} />
+      <TwoWeeks days={days} plan={state === 'running' ? routine.challenge : null} />
       {state === 'open' || state === 'over'
         ? <Button label={state === 'open' ? 'Ansehen und starten' : 'Ergebnis ansehen'} onPress={() => openPlan(routine.id)} />
         : <Button label={done ? 'Noch einmal machen' : 'Routine starten'} kind={done ? 'secondary' : 'primary'} onPress={() => openRoutine(routine.id)} />}
       {state === 'running' ? <Button label="Zum Plan" kind="ghost" onPress={() => openPlan(routine.id)} /> : null}
     </Card>
-  );
-}
-
-/** A further routine, small. */
-function OtherRoutine({ routine }: { routine: MemberRoutine }) {
-  const p = usePalette();
-  const [prefs] = useRoutinePrefs();
-  return (
-    <Card onPress={() => openRoutine(routine.id)} accessibilityLabel={`${routine.title} starten`} style={{ padding: space.l, flexDirection: 'row', alignItems: 'center', gap: space.m }}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
-        <Txt variant="small" muted>{routine.stats.doneToday ? 'Heute erledigt · ' : ''}{plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine, prefs.length))}</Txt>
-      </View>
-      <Ionicons name={routine.stats.doneToday ? 'checkmark-circle' : 'play-circle'} size={32} color={p.accent} />
-    </Card>
-  );
-}
-
-function StreakCard({ routine }: { routine: MemberRoutine }) {
-  const p = usePalette();
-  const { stats } = routine;
-  const done = new Set(stats.days);
-  const today = localDay();
-  const card = useShareCard({ big: String(stats.streak), label: stats.streak === 1 ? 'Tag in Folge' : 'Tage in Folge', line: routine.title });
-  return (
-    <Card style={{ padding: space.l, gap: space.l }}>
-      {card.element}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
-        <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="flame" size={30} color={p.accent} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Txt variant="display">{stats.streak}</Txt>
-          <Txt muted>{stats.streak === 1 ? 'Tag in Folge' : 'Tage in Folge'}</Txt>
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 2 }}>
-          <Txt variant="small" muted>Bestwert {stats.bestStreak}</Txt>
-          <Txt variant="small" muted>{plural(stats.totalDays, 'Tag', 'Tage')} gesamt</Txt>
-        </View>
-      </View>
-      <View style={{ gap: space.xs }}>
-        <View style={{ flexDirection: 'row' }}>
-          {WEEKDAYS.map((d) => <Txt key={d} variant="caption" muted style={{ flex: 1, textAlign: 'center' }}>{d}</Txt>)}
-        </View>
-        {calendarWeeks().map((week, i) => (
-          <View key={i} style={{ flexDirection: 'row' }}>
-            {week.map((day, j) => {
-              const isDone = !!day && done.has(day);
-              const isToday = day === today;
-              return (
-                <View key={j} style={{ flex: 1, alignItems: 'center', paddingVertical: 3 }}>
-                  <View
-                    accessibilityLabel={day ? `${day}${isDone ? ', erledigt' : ''}` : undefined}
-                    style={{
-                      width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: isDone ? p.accent : day ? p.surfaceAlt : 'transparent',
-                      borderWidth: isToday ? 2 : 0, borderColor: p.accent,
-                    }}
-                  >
-                    {isDone ? <Ionicons name="checkmark" size={16} color={p.onAccent} /> : day ? <Txt variant="small" muted>{Number(day.slice(8))}</Txt> : null}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        ))}
-      </View>
-      {stats.streak > 0 && Platform.OS !== 'web' ? <Button label="Serie teilen" kind="secondary" onPress={() => void card.share()} /> : null}
-    </Card>
-  );
-}
-
-function BadgesCard({ routine }: { routine: MemberRoutine }) {
-  const p = usePalette();
-  const badges = badgesOf(routine.stats);
-  const earned = badges.filter((b) => b.earned).length;
-  return (
-    <Section title="Abzeichen" action={<Txt variant="small" muted>{earned} von {badges.length}</Txt>}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
-        {badges.map((b) => (
-          <View
-            key={b.id}
-            accessibilityLabel={`${b.detail}${b.earned ? ', erreicht' : ', noch nicht erreicht'}`}
-            style={{ width: '23%', alignItems: 'center', gap: 4, paddingVertical: space.m, borderRadius: radius.l, backgroundColor: b.earned ? p.accentSoft : p.surface, borderWidth: 1, borderColor: p.line, opacity: b.earned ? 1 : 0.55 }}
-          >
-            <Ionicons name={b.earned ? b.icon : 'lock-closed-outline'} size={26} color={b.earned ? p.accent : p.textMuted} />
-            <Txt variant="small" style={{ fontWeight: '700' }}>{b.label}</Txt>
-          </View>
-        ))}
-      </View>
-      <Txt variant="small" muted>Flammen für Tage in Folge, Sterne für Tage insgesamt.</Txt>
-    </Section>
-  );
-}
-
-/** The time as a wheel in the popup (iPhone), behind the phone's own clock dialog (Android) or as text (browser preview). */
-function TimeField({ hour, minute, onChange }: { hour: number; minute: number; onChange: (hour: number, minute: number) => void }) {
-  const p = usePalette();
-  const [dialog, setDialog] = useState(false);
-  const [text, setText] = useState(clockTime(hour, minute).slice(0, 5));
-  const asDate = new Date();
-  asDate.setHours(hour, minute, 0, 0);
-  if (Platform.OS === 'web') {
-    return (
-      <Field
-        label="Uhrzeit"
-        value={text}
-        onChangeText={(v) => {
-          setText(v);
-          const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(v);
-          if (m) onChange(Number(m[1]), Number(m[2]));
-        }}
-      />
-    );
-  }
-  const picker = (
-    <DateTimePicker
-      value={asDate}
-      mode="time"
-      is24Hour
-      locale="de-DE"
-      themeVariant={p.scheme}
-      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-      style={{ alignSelf: 'stretch' }}
-      onChange={(event, date) => {
-        setDialog(false);
-        if (event.type === 'set' && date) onChange(date.getHours(), date.getMinutes());
-      }}
-    />
-  );
-  if (Platform.OS === 'ios') return picker;
-  return (
-    <>
-      <Pressable accessibilityRole="button" accessibilityLabel="Uhrzeit wählen" onPress={() => setDialog(true)} style={{ alignItems: 'center', paddingVertical: space.m, borderRadius: radius.m, backgroundColor: p.surfaceAlt }}>
-        <Txt variant="display" style={{ fontVariant: ['tabular-nums'] }}>{clockTime(hour, minute)}</Txt>
-      </Pressable>
-      {dialog ? picker : null}
-    </>
-  );
-}
-
-/** The popup of a reminder: its time (the photo also its day), saved only with "Speichern". */
-function ReminderPopup({ title, hint, hour, minute, weekday, onSave, onClose }: {
-  title: string; hint: string; hour: number; minute: number; weekday?: number;
-  onSave: (hour: number, minute: number, weekday: number | undefined) => void; onClose: () => void;
-}) {
-  const p = usePalette();
-  const [time, setTime] = useState({ hour, minute });
-  const [day, setDay] = useState(weekday);
-  return (
-    <Modal transparent visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={{ flex: 1, justifyContent: 'center', padding: space.l }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Schließen, ohne zu speichern" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
-        <View accessibilityViewIsModal style={{ gap: space.m, padding: space.xl, borderRadius: radius.xl, backgroundColor: p.surface }}>
-          <View style={{ gap: 2 }}>
-            <Txt variant="title">{title}</Txt>
-            <Txt variant="small" muted>{hint}</Txt>
-          </View>
-          {day !== undefined ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 4 }}>
-              {REMINDER_DAYS.map((w) => {
-                const on = w.day === day;
-                return (
-                  <Pressable
-                    key={w.day}
-                    accessibilityRole="radio"
-                    accessibilityLabel={w.long}
-                    accessibilityState={{ selected: on }}
-                    onPress={() => setDay(w.day)}
-                    style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.m, backgroundColor: on ? p.accent : p.surfaceAlt }}
-                  >
-                    <Txt variant="small" color={on ? p.onAccent : p.text} style={{ fontWeight: '700' }}>{w.short}</Txt>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-          <TimeField hour={time.hour} minute={time.minute} onChange={(h, m) => setTime({ hour: h, minute: m })} />
-          <View style={{ flexDirection: 'row', gap: space.m }}>
-            <Button label="Abbrechen" kind="secondary" onPress={onClose} style={{ flex: 1, paddingHorizontal: space.m }} />
-            <Button label="Speichern" onPress={() => onSave(time.hour, time.minute, day)} style={{ flex: 1, paddingHorizontal: space.m }} />
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-/** A reminder: the switch and, while it is on, its time; a tap on the time opens the popup. */
-function ReminderRow({ label, help, timeLabel, when, value, onToggle, onEdit }: {
-  label: string; help: string; timeLabel: string; when: string; value: boolean; onToggle: (v: boolean) => void; onEdit: () => void;
-}) {
-  const p = usePalette();
-  return (
-    <View style={{ backgroundColor: p.surface }}>
-      <ToggleRow label={label} help={help} value={value} onValueChange={onToggle} />
-      {value ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${label}: ${when}, ändern`}
-          onPress={onEdit}
-          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s, minHeight: 44, paddingHorizontal: space.l, paddingBottom: space.m, opacity: pressed ? 0.6 : 1 })}
-        >
-          <Ionicons name="time-outline" size={18} color={p.accent} />
-          <Txt variant="small" muted style={{ flex: 1 }}>{timeLabel}</Txt>
-          <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{when}</Txt>
-          <Ionicons name="chevron-forward" size={16} color={p.accent} />
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
-function RemindersCard({ routine }: { routine: MemberRoutine | null }) {
-  const [prefs, update] = useRoutinePrefs();
-  const [editing, setEditing] = useState<'daily' | 'rescue' | 'photo' | null>(null);
-
-  const turnOn = async (patch: Partial<RoutinePrefs>, kind: NonNullable<typeof editing>) => {
-    if (!(await allowNotifications())) {
-      Alert.alert('Mitteilungen sind aus', 'Erlaube Mitteilungen für die App in den Einstellungen deines Handys, dann klappen die Erinnerungen.');
-      return;
-    }
-    await syncReminders(update(patch), routine);
-    setEditing(kind);
-  };
-  const off = (patch: Partial<RoutinePrefs>) => void syncReminders(update(patch), routine);
-  const save = (patch: Partial<RoutinePrefs>) => {
-    void syncReminders(update(patch), routine);
-    setEditing(null);
-  };
-  const photoDay = REMINDER_DAYS.find((w) => w.day === prefs.photoWeekday);
-
-  return (
-    <Section title="Erinnerungen">
-      <MenuGroup>
-        {routine ? (
-          <ReminderRow
-            label="Tägliche Erinnerung"
-            help="Eine Mitteilung, wenn es Zeit für die Routine ist."
-            timeLabel="Jeden Tag um"
-            when={clockTime(prefs.hour, prefs.minute)}
-            value={prefs.reminder}
-            onToggle={(v) => (v ? void turnOn({ reminder: true }, 'daily') : off({ reminder: false }))}
-            onEdit={() => setEditing('daily')}
-          />
-        ) : null}
-        {routine ? (
-          <ReminderRow
-            label="Serie retten"
-            help="Nur falls du die Routine an dem Tag noch nicht gemacht hast."
-            timeLabel="Jeden Tag um"
-            when={clockTime(prefs.rescueHour, prefs.rescueMinute)}
-            value={prefs.rescue}
-            onToggle={(v) => (v ? void turnOn({ rescue: true }, 'rescue') : off({ rescue: false }))}
-            onEdit={() => setEditing('rescue')}
-          />
-        ) : null}
-        <ReminderRow
-          label="Wöchentliches Foto"
-          help="Eine Erinnerung an dein Fortschrittsfoto."
-          timeLabel={`Immer ${photoDay?.long ?? ''} um`}
-          when={clockTime(prefs.photoHour, prefs.photoMinute)}
-          value={prefs.photoReminder}
-          onToggle={(v) => (v ? void turnOn({ photoReminder: true }, 'photo') : off({ photoReminder: false }))}
-          onEdit={() => setEditing('photo')}
-        />
-      </MenuGroup>
-      {editing === 'daily' ? (
-        <ReminderPopup
-          title="Tägliche Erinnerung"
-          hint="Wann ist Zeit für deine Routine?"
-          hour={prefs.hour}
-          minute={prefs.minute}
-          onSave={(hour, minute) => save({ hour, minute })}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-      {editing === 'rescue' ? (
-        <ReminderPopup
-          title="Serie retten"
-          hint="Wann sollen wir dich erinnern, wenn die Routine noch offen ist?"
-          hour={prefs.rescueHour}
-          minute={prefs.rescueMinute}
-          onSave={(rescueHour, rescueMinute) => save({ rescueHour, rescueMinute })}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-      {editing === 'photo' ? (
-        <ReminderPopup
-          title="Wöchentliches Foto"
-          hint="An welchem Tag und um wie viel Uhr?"
-          hour={prefs.photoHour}
-          minute={prefs.photoMinute}
-          weekday={prefs.photoWeekday}
-          onSave={(photoHour, photoMinute, photoWeekday) => save({ photoHour, photoMinute, photoWeekday: photoWeekday ?? prefs.photoWeekday })}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-    </Section>
   );
 }
 
@@ -595,7 +265,7 @@ export default function RoutineScreen() {
   const swaps = useSwaps();
   const main = mainRoutine(q.data);
 
-  // keep the scheduled reminders in line with today's state (e.g. no "Serie retten" once today is done)
+  // keep the scheduled reminders in line with the settings and the routine
   useEffect(() => {
     if (q.data) void syncReminders(prefs, main);
   }, [q.data, prefs, main]);
@@ -603,12 +273,10 @@ export default function RoutineScreen() {
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
 
-  // streak, calendar, goal and badges count every routine: changing from one plan to another does not lose them
+  // calendar and goal count every routine: changing from one plan to another does not lose them
   const stats = overallStats(q.data);
-  const counted = main ? { ...main, stats } : null;
   const today = main ? withSwaps(main, swaps.steps) : null;
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
-  const others = q.data.filter((r) => !r.plan && r.id !== main?.id);
 
   return (
     <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
@@ -622,13 +290,14 @@ export default function RoutineScreen() {
         ) : null}
       </View>
 
-      {!main || !today || !counted ? (
+      {!main || !today ? (
         <>
           <Card style={{ padding: space.xl, gap: space.s }}>
             <Ionicons name="flame-outline" size={32} color={p.accent} />
             <Txt variant="title">Noch keine Routine</Txt>
-            <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier – mit Timer, Erinnerung und deiner Serie.</Txt>
+            <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier, mit Timer und Erinnerung.</Txt>
           </Card>
+          <PhotosCard />
           <ZonesSection />
         </>
       ) : (
@@ -636,25 +305,12 @@ export default function RoutineScreen() {
           <TodayHero routine={today} days={stats.days} />
           {plans.map((r) => <PlanCard key={r.id} routine={r} />)}
           {!main.plan || planState(main) === 'running' ? <TodayChecklist routine={today} /> : null}
+          <PhotosCard />
           <ZonesSection />
-          <GoalCard routine={counted} />
+          <GoalCard stats={stats} />
           {main.plan ? null : <ChallengeBlock routine={main} />}
-          {others.length > 0 ? (
-            <Section title="Weitere Routinen">
-              <View style={{ gap: space.m }}>
-                {others.map((r) => <OtherRoutine key={r.id} routine={r} />)}
-              </View>
-            </Section>
-          ) : null}
-          <Section title="Deine Serie">
-            <StreakCard routine={counted} />
-          </Section>
-          <BadgesCard routine={counted} />
         </>
       )}
-
-      <PhotosCard />
-      <RemindersCard routine={main} />
     </Screen>
   );
 }
