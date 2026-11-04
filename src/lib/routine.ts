@@ -1,7 +1,7 @@
 // The daily routine (app only): the routines of the community with the member's streak (GET /api/member/routines of
-// the software, worker/modules/player/routines.ts), marking a day done or opening it again, the daily reminder (a local notification
-// of the phone — no server involved) and the progress photos (stored ONLY on the phone, in the app's own folder; never
-// uploaded).
+// the software, worker/modules/player/routines.ts), marking a day done or opening it again, the daily reminder (local notifications
+// of the phone, another text every day, none on a day already done — no server involved) and the progress photos (stored ONLY on the
+// phone, in the app's own folder; never uploaded).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
@@ -11,6 +11,7 @@ import { Platform } from 'react-native';
 import { useEffect, useSyncExternalStore } from 'react';
 import { ApiError } from './api';
 import { localDay } from './nav';
+import { PHOTO_REMINDER, plannedReminders } from './reminder-texts';
 import { useApi } from './session';
 import { getItem, setItem } from './storage';
 import type { Id } from './types';
@@ -144,18 +145,26 @@ export async function savePrefs(prefs: RoutinePrefs): Promise<void> {
 
 /** The settings as shared state of the app (loaded once, saved on every change). */
 let prefsNow: RoutinePrefs = DEFAULT_PREFS;
+let prefsLoading = false;
 let prefsLoaded = false;
 const prefsListeners = new Set<() => void>();
 const emitPrefs = () => prefsListeners.forEach((l) => l());
 
 function subscribePrefs(l: () => void): () => void {
   prefsListeners.add(l);
-  if (!prefsLoaded) {
-    prefsLoaded = true;
-    void loadPrefs().then((p) => { prefsNow = p; emitPrefs(); });
+  if (!prefsLoading) {
+    prefsLoading = true;
+    void loadPrefs().then((p) => {
+      prefsNow = p;
+      prefsLoaded = true;
+      emitPrefs();
+    });
   }
   return () => { prefsListeners.delete(l); };
 }
+
+/** The saved settings are there (before that the defaults stand in: nothing should be planned from those). */
+export const routinePrefsLoaded = () => prefsLoaded;
 
 export function useRoutinePrefs(): [RoutinePrefs, (patch: Partial<RoutinePrefs>) => RoutinePrefs] {
   const prefs = useSyncExternalStore(subscribePrefs, () => prefsNow, () => prefsNow);
@@ -171,7 +180,10 @@ export function useRoutinePrefs(): [RoutinePrefs, (patch: Partial<RoutinePrefs>)
 // ---------- reminders (local notifications, each under its own id) ----------
 
 const CHANNEL = 'routine';
-const DAILY_ID = 'routine-daily';
+/** One notification per day under this prefix plus the date: each has its own text, and a day that is done has none. */
+const DAILY_PREFIX = 'routine-daily';
+/** How many days ahead; the app plans again whenever it opens. iOS keeps at most 64 pending notifications. */
+const DAILY_AHEAD = 30;
 const PHOTO_ID = 'photo-weekly';
 /** "Serie retten" is gone (03.11.2026): what an older version scheduled is removed. */
 const RESCUE_PREFIX = 'rescue-';
@@ -194,10 +206,11 @@ async function cancelPrefix(prefix: string): Promise<void> {
   await Promise.all(all.filter((n) => n.identifier.startsWith(prefix)).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
 }
 
-/** Brings the scheduled notifications in line with the settings: the daily reminder and the weekly photo reminder. */
-export async function syncReminders(prefs: RoutinePrefs, routine: { title: string } | null): Promise<void> {
-  if (Platform.OS === 'web') return;
-  await Notifications.cancelScheduledNotificationAsync(DAILY_ID).catch(() => undefined);
+let lastPlanned = '';
+let planning: Promise<void> = Promise.resolve();
+
+async function planReminders(prefs: RoutinePrefs, routine: MemberRoutine | null): Promise<void> {
+  await cancelPrefix(DAILY_PREFIX);
   await Notifications.cancelScheduledNotificationAsync(PHOTO_ID).catch(() => undefined);
   await cancelPrefix(RESCUE_PREFIX);
   const anything = (prefs.reminder && routine !== null) || prefs.photoReminder;
@@ -208,19 +221,34 @@ export async function syncReminders(prefs: RoutinePrefs, routine: { title: strin
       { identifier: 'snooze-60', buttonTitle: 'In 1 Stunde', options: { opensAppToForeground: true } },
       { identifier: 'snooze-180', buttonTitle: 'In 3 Stunden', options: { opensAppToForeground: true } },
     ]);
-    await Notifications.scheduleNotificationAsync({
-      identifier: DAILY_ID,
-      content: { title: 'Zeit für deine Routine', body: `${routine.title} – ein paar Minuten nur für dich.`, categoryIdentifier: REMINDER_CATEGORY },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: prefs.hour, minute: prefs.minute, channelId: CHANNEL },
-    });
+    for (const r of plannedReminders(prefs, routine, DAILY_AHEAD)) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${DAILY_PREFIX}-${r.day}`,
+        content: { ...r.text, categoryIdentifier: REMINDER_CATEGORY },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: r.date, channelId: CHANNEL },
+      });
+    }
   }
   if (prefs.photoReminder) {
     await Notifications.scheduleNotificationAsync({
       identifier: PHOTO_ID,
-      content: { title: 'Zeit für dein Fortschrittsfoto', body: 'Gleiches Licht, gleicher Abstand – in 10 Sekunden erledigt.' },
+      content: PHOTO_REMINDER,
       trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: prefs.photoWeekday, hour: prefs.photoHour, minute: prefs.photoMinute, channelId: CHANNEL },
     });
   }
+}
+
+/** Brings the scheduled notifications in line with the settings and the routine; one after the other, and only when something changed. */
+export function syncReminders(prefs: RoutinePrefs, routine: MemberRoutine | null): Promise<void> {
+  if (Platform.OS === 'web') return Promise.resolve();
+  const state = JSON.stringify([
+    localDay(), prefs.reminder, prefs.hour, prefs.minute, prefs.photoReminder, prefs.photoWeekday, prefs.photoHour, prefs.photoMinute,
+    routine?.title, routine?.stats.doneToday, routine?.stats.streak, routine?.challenge?.dayNumber, routine?.challenge?.days,
+  ]);
+  if (state === lastPlanned) return planning;
+  lastPlanned = state;
+  planning = planning.then(() => planReminders(prefs, routine)).catch(() => undefined);
+  return planning;
 }
 
 /** The routine is done: a moved reminder has nothing left to say. */

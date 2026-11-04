@@ -1,23 +1,24 @@
-// Routine overview, the most important first: today's routine with the big start button, how far today and the last 14 days at
-// a glance; a hint that recommends the reminder while it is off; the plans under way ("Von Mailin empfohlen", zones); the exercises to
-// tick off (all ticked = day done, unticking or "Zurücksetzen" opens the day again); the progress photos (optionally behind Face ID);
-// "Gezielt üben" (plans and short sessions by zone); the member's own goal ("Mein Ziel" with a progress bar and a forecast); a challenge
-// when the coach made the routine one ("Tag 12 von 30"). The settings of the reminders are under "Profil".
+// Routine overview, with one main action and the most important first: today on a large picture with the way in; where the member stands (the
+// plan with its 14 days, a tap leads to the whole plan; without a plan the last 14 days); a small hint that recommends the reminder while it is
+// off; the exercises to tick off (all ticked = day done, a tap on one takes its tick back and opens the day again); the progress photos
+// (optionally behind Face ID); "Gezielt üben" (plans and short sessions by zone); the member's own goal; a challenge when the coach made the
+// routine one ("Tag 12 von 30"). The settings of the reminders are under "Profil".
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderPopup } from '@/components/reminder-popup';
-import { ExerciseThumb, openPlan, openRoutine, ProgressRing, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
+import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openPlan, openRoutine, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
 import { TourTarget } from '@/components/tour';
-import { Button, Card, ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
+import { Button, Card, ErrorView, Loading, MenuGroup, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
-import { mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
+import { goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
 import {
   allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
   type MemberRoutine, type ProgressPhoto, type RoutineStats,
@@ -43,18 +44,22 @@ function ReminderHint({ routine }: { routine: MemberRoutine }) {
     <>
       {!prefs.reminder && !prefs.reminderHintClosed ? (
         <TourTarget id="routine.reminder">
-          <Card style={{ padding: space.l, gap: space.m }}>
-            <View style={{ flexDirection: 'row', gap: space.m }}>
-              <Ionicons name="alarm-outline" size={26} color={p.accent} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Txt variant="heading">Erinnerung einschalten?</Txt>
-                <Txt variant="small" muted>Die tägliche Erinnerung ist noch aus. Wir empfehlen sie dir, damit du leichter dranbleibst. Die Uhrzeit wählst du selbst.</Txt>
-              </View>
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
+            <Ionicons name="alarm-outline" size={24} color={p.accent} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt variant="heading">Erinnerung ist aus</Txt>
+              <Txt variant="small" muted>Empfohlen, damit du dranbleibst.</Txt>
             </View>
-            <View style={{ flexDirection: 'row', gap: space.m }}>
-              <Button label="Nicht jetzt" kind="secondary" onPress={() => update({ reminderHintClosed: true })} style={{ flex: 1, paddingHorizontal: space.m }} />
-              <Button label="Einschalten" onPress={() => void turnOn()} style={{ flex: 1, paddingHorizontal: space.m }} />
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void turnOn()}
+              style={({ pressed }) => ({ minHeight: 40, justifyContent: 'center', paddingHorizontal: space.m, borderRadius: 999, backgroundColor: p.accentSoft, opacity: pressed ? 0.7 : 1 })}
+            >
+              <Txt variant="small" color={p.accent} style={{ fontWeight: '700' }}>Einschalten</Txt>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Nicht jetzt" hitSlop={10} onPress={() => update({ reminderHintClosed: true })}>
+              <Ionicons name="close" size={20} color={p.textMuted} />
+            </Pressable>
           </Card>
         </TourTarget>
       ) : null}
@@ -75,60 +80,52 @@ function ReminderHint({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** "Mein Ziel": the goal in the member's words, a big bar (routine days done of those needed), this week as dots and a
- *  sentence that says how close it is ("Bleib dran: So erreichst du dein Ziel am 24. November."). */
+/** "Mein Ziel": small, below everything else: the goal in the member's words, a bar and a sentence on how close it is. */
 function GoalCard({ stats }: { stats: RoutineStats }) {
   const p = usePalette();
   const [goal] = useGoal();
+  const edit = () => router.push('/routine/ziel' as Href);
   if (!goal) {
     return (
-      <Card style={{ padding: space.l, gap: space.m }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
-          <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="flag" size={24} color={p.accent} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Txt variant="heading">Setz dir ein Ziel</Txt>
-            <Txt variant="small" muted>Was willst du erreichen? Jeden Tag Routine bringt dich ein Stück näher – du siehst genau, wie weit.</Txt>
-          </View>
+      <Card onPress={edit} accessibilityLabel="Ziel festlegen" style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="flag" size={22} color={p.accent} />
         </View>
-        <Button label="Ziel festlegen" onPress={() => router.push('/routine/ziel' as Href)} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt variant="heading">Eigenes Ziel festlegen</Txt>
+          <Txt variant="small" muted>Was willst du erreichen? Du siehst genau, wie weit du bist.</Txt>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
       </Card>
     );
   }
   const g = goalProgress(goal, stats);
   return (
-    <Card style={{ padding: space.l, gap: space.m }}>
+    <Card onPress={edit} accessibilityLabel={`Mein Ziel: ${goal.text}, bearbeiten`} style={{ padding: space.l, gap: space.s }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
-        <Ionicons name={g.reached ? 'trophy' : 'flag'} size={18} color={p.accent} />
+        <Ionicons name={g.reached ? 'trophy' : 'flag'} size={16} color={p.accent} />
         <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>Mein Ziel</Txt>
-        <Pressable accessibilityRole="button" accessibilityLabel="Ziel bearbeiten" hitSlop={10} onPress={() => router.push('/routine/ziel' as Href)}>
-          <Ionicons name="create-outline" size={20} color={p.textMuted} />
-        </Pressable>
+        <Txt variant="small" style={{ fontWeight: '700' }} color={p.accent}>{Math.round(g.share * 100)} %</Txt>
+        <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
       </View>
-      <Txt variant="title">{goal.text}</Txt>
-      <View style={{ gap: space.xs }}>
-        <ProgressBar value={g.share} style={{ height: 14, borderRadius: 7 }} />
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Txt variant="small" muted>{g.done} von {g.target} Routine-Tagen</Txt>
-          <Txt variant="small" style={{ fontWeight: '700' }} color={p.accent}>{Math.round(g.share * 100)} %</Txt>
-        </View>
-      </View>
-      <Txt variant="heading" color={g.reached ? p.success : p.text}>{g.message}</Txt>
-      <Txt variant="small" muted>Diese Woche: {g.weekDone} von {goal.perWeek} · Tag {g.dayOfGoal} von {goal.days}</Txt>
+      <Txt variant="heading">{goal.text}</Txt>
+      <ProgressBar value={g.share} style={{ height: 8, borderRadius: 4 }} />
+      <Txt variant="small" color={g.reached ? p.success : p.textMuted}>{g.message}</Txt>
     </Card>
   );
 }
 
-/** Today's exercises to tick off; all ticked = the day is done. Unticking one, or "Zurücksetzen", opens the day again. */
+/** Today's exercises to tick off; all ticked = the day is done. A tap on a ticked one takes the tick back and opens the day again. */
 function TodayChecklist({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const checks = useDayChecks(routine.id);
   const checkIn = useCheckIn(routine.id);
   const doneToday = routine.stats.doneToday;
+  const total = routine.steps.length;
   const ticked = routine.steps.filter((s) => doneToday || checks.isDone(s.id)).length;
 
   const toggle = (stepId: string) => {
+    if (Platform.OS !== 'web') void Haptics.selectionAsync();
     if (doneToday) {
       // the day was done: this exercise opens, the others stay ticked
       checks.set(routine.steps.filter((s) => s.id !== stepId).map((s) => s.id));
@@ -141,14 +138,15 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
     checks.toggle(stepId);
     if (routine.steps.every((s) => willBe.has(s.id)) && !checkIn.isPending) checkIn.mutate(true);
   };
-  const reset = () => {
-    checks.set([]);
-    if (doneToday) checkIn.mutate(false);
-  };
 
   return (
-    <Section title="Heute abhaken" action={<Txt variant="small" muted>{ticked} von {routine.steps.length}</Txt>}>
-      <View style={{ gap: space.s }}>
+    <Section
+      title="Heute abhaken"
+      action={ticked === total
+        ? <Txt variant="small" color={p.accent} style={{ fontWeight: '700' }}>Alles erledigt</Txt>
+        : <Txt variant="small" muted>{ticked} von {total}</Txt>}
+    >
+      <MenuGroup>
         {routine.steps.map((s) => {
           const on = doneToday || checks.isDone(s.id);
           return (
@@ -158,20 +156,23 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
               accessibilityState={{ checked: on }}
               accessibilityLabel={s.title}
               onPress={() => toggle(s.id)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, paddingVertical: space.s, paddingHorizontal: space.m, minHeight: 48, borderRadius: radius.m, backgroundColor: p.surface }}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, minHeight: 72, backgroundColor: pressed ? p.surfaceAlt : p.surface })}
             >
-              <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                {on ? <Ionicons name="checkmark" size={16} color={p.onAccent} /> : null}
+              <View style={{ opacity: on ? 0.55 : 1 }}>
+                <ExerciseThumb step={s} size={56} />
               </View>
-              <ExerciseThumb step={s} />
-              <Txt variant="heading" style={{ flex: 1, textDecorationLine: on ? 'line-through' : 'none', opacity: on ? 0.6 : 1 }} numberOfLines={2}>{s.title}</Txt>
-              <Txt variant="small" muted>{clock(stepSeconds(s))}</Txt>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt variant="heading" numberOfLines={2} color={on ? p.textMuted : p.text}>{s.title}</Txt>
+                <Txt variant="small" muted>{clock(stepSeconds(s))}</Txt>
+              </View>
+              <View style={{ width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                {on ? <Ionicons name="checkmark" size={18} color={p.onAccent} /> : null}
+              </View>
             </Pressable>
           );
         })}
-      </View>
+      </MenuGroup>
       {checkIn.isError ? <Txt variant="small" color={p.danger}>{errorText(checkIn.error)}</Txt> : null}
-      {ticked > 0 ? <Button label={doneToday ? 'Zurücksetzen: Heute ist noch nicht erledigt' : 'Häkchen zurücksetzen'} kind="ghost" onPress={reset} /> : null}
     </Section>
   );
 }
@@ -213,7 +214,7 @@ function ChallengeBlock({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** A plan: where the member stands, one tap to its page. */
+/** Another plan: where the member stands, one tap to its page. */
 function PlanCard({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const ch = routine.challenge;
@@ -238,36 +239,61 @@ function PlanCard({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** Today's routine: what, how long, how far today, the last 14 days, and the way in. */
-function TodayHero({ routine, days }: { routine: MemberRoutine; days: string[] }) {
-  const p = usePalette();
-  const checks = useDayChecks(routine.id);
-  const done = routine.stats.doneToday;
+/** Today's routine on a large picture, with the one action of this page. */
+function TodayHero({ routine }: { routine: MemberRoutine }) {
   const state = routine.plan ? planState(routine) : null;
-  const total = routine.steps.length;
-  const ticked = done ? total : routine.steps.filter((s) => checks.isDone(s.id)).length;
+  const ch = routine.challenge;
+  const picture = routine.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
+  const open = () => openPlan(routine.id);
+  const label = state === 'running' && ch ? `Tag ${ch.dayNumber} von ${ch.days}` : state === 'over' ? 'Plan beendet' : routine.plan ? planLabel(routine) : 'Heute';
+  const line = state === 'open' && routine.plan
+    ? `${goalLabel(routine.plan.days)}, jeden Tag deine Übungen`
+    : state === 'over' && ch
+      ? `${ch.doneDays} von ${ch.days} Tagen erledigt`
+      : `${plural(routine.steps.length, 'Übung', 'Übungen')} · ${minutes(routineSeconds(routine))}`;
   return (
     <TourTarget id="routine.hero">
-    <Card style={{ padding: space.l, gap: space.l, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
-        <View style={{ flex: 1, gap: space.xs }}>
-          <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : routine.plan ? planLabel(routine) : 'Heute dran'}</Txt>
-          <Txt variant="title">{routine.title}</Txt>
-          <Txt muted>
-            {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
-            {plural(total, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine))}
-          </Txt>
-        </View>
-        <ProgressRing size={76} share={ticked / Math.max(1, total)} stroke={8} track={p.surface}>
-          {done ? <Ionicons name="checkmark" size={32} color={p.accent} /> : <Txt variant="heading" style={{ fontVariant: ['tabular-nums'] }}>{ticked}/{total}</Txt>}
-        </ProgressRing>
-      </View>
-      <TourTarget id="routine.days"><TwoWeeks days={days} plan={state === 'running' ? routine.challenge : null} /></TourTarget>
-      {state === 'open' || state === 'over'
-        ? <Button label={state === 'open' ? 'Ansehen und starten' : 'Ergebnis ansehen'} onPress={() => openPlan(routine.id)} />
-        : done ? null : <Button label="Routine starten" onPress={() => openRoutine(routine.id)} />}
-      {state === 'running' ? <Button label="Zum Plan" kind="ghost" onPress={() => openPlan(routine.id)} /> : null}
-    </Card>
+      <HeroCard imageUrl={picture} label={label} title={routine.title} line={line}>
+        {state === 'open' ? <HeroButton label="Ansehen und starten" icon="arrow-forward" onPress={open} />
+          : state === 'over' ? <HeroButton label="Ergebnis ansehen" icon="trophy" onPress={open} />
+            : routine.stats.doneToday ? <HeroDone text="Heute erledigt. Bis morgen!" />
+              : <HeroButton label="Routine starten" icon="play" onPress={() => openRoutine(routine.id)} />}
+      </HeroCard>
+    </TourTarget>
+  );
+}
+
+/** Where the member stands: the plan under way with its 14 days, a tap leads to the whole plan; otherwise the last 14 days. */
+function WayCard({ routine, days }: { routine: MemberRoutine; days: string[] }) {
+  const p = usePalette();
+  const ch = routine.challenge;
+  if (routine.plan && ch && planState(routine) === 'running') {
+    return (
+      <TourTarget id="routine.days">
+        <Card onPress={() => openPlan(routine.id)} accessibilityLabel={`${planLabel(routine)}: alle Tage, Übungen und Fotos ansehen`} style={{ padding: space.l, gap: space.m }}>
+          <View style={{ gap: space.s }}>
+            <Txt variant="caption" color={p.accent}>{planLabel(routine)}</Txt>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.m }}>
+              <Txt variant="title" style={{ flex: 1 }}>Tag {ch.dayNumber} von {ch.days}</Txt>
+              <Txt variant="small" muted>{ch.doneDays} erledigt</Txt>
+            </View>
+            <ProgressBar value={(ch.dayNumber ?? 0) / ch.days} style={{ height: 8, borderRadius: 4 }} />
+          </View>
+          <TwoWeeks days={days} plan={ch} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+            <Txt variant="small" color={p.accent} style={{ flex: 1, fontWeight: '600' }}>Alle Tage, Übungen und Fotos</Txt>
+            <Ionicons name="chevron-forward" size={18} color={p.accent} />
+          </View>
+        </Card>
+      </TourTarget>
+    );
+  }
+  return (
+    <TourTarget id="routine.days">
+      <Card style={{ padding: space.l, gap: space.m }}>
+        <Txt variant="heading">Deine letzten 14 Tage</Txt>
+        <TwoWeeks days={days} />
+      </Card>
     </TourTarget>
   );
 }
@@ -280,34 +306,48 @@ function PhotosCard() {
   useFocusEffect(useCallback(() => { setPhotos(listPhotos()); }, []));
   const first = photos[0];
   const last = photos[photos.length - 1];
+  const all = () => router.push('/routine/fotos' as Href);
   return (
-    <Card style={{ padding: space.l, gap: space.m }}>
-      <View style={{ gap: 2 }}>
-        <Txt variant="heading">Fortschrittsfotos</Txt>
-        <Txt variant="small" muted>Einmal pro Woche ein Foto im gleichen Licht – so siehst du, was sich verändert. Die Fotos bleiben nur auf deinem Handy.</Txt>
-      </View>
-      {photos.length > 0 && !visible ? (
-        <Pressable accessibilityRole="button" onPress={() => void unlockPhotos()} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, padding: space.m, borderRadius: radius.m, backgroundColor: p.surfaceAlt }}>
-          <Ionicons name="lock-closed" size={20} color={p.accent} />
-          <Txt variant="heading" style={{ flex: 1 }}>Fotos entsperren</Txt>
+    <Section
+      title="Fortschrittsfotos"
+      action={photos.length > 0 ? (
+        <Pressable accessibilityRole="button" hitSlop={10} onPress={all}>
+          <Txt variant="small" color={p.accent} style={{ fontWeight: '600' }}>Alle ansehen</Txt>
         </Pressable>
-      ) : first && last && first !== last ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Vergleich ansehen" onPress={() => router.push('/routine/fotos' as Href)} style={{ flexDirection: 'row', gap: space.s }}>
-          {[first, last].map((ph, i) => (
-            <View key={ph.name} style={{ flex: 1, gap: space.xs }}>
-              <Image source={{ uri: ph.uri }} style={{ aspectRatio: 3 / 4, borderRadius: radius.m }} contentFit="cover" />
-              <Txt variant="small" muted>{i === 0 ? 'Vorher' : 'Jetzt'} · {ph.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</Txt>
-            </View>
-          ))}
-        </Pressable>
-      ) : last ? (
-        <Image source={{ uri: last.uri }} style={{ width: 120, aspectRatio: 3 / 4, borderRadius: radius.m }} contentFit="cover" />
-      ) : null}
-      <View style={{ flexDirection: 'row', gap: space.m }}>
-        <Button label="Foto machen" onPress={() => router.push('/routine/kamera' as Href)} style={{ flex: 1 }} />
-        {photos.length > 0 ? <Button label="Alle Fotos" kind="secondary" onPress={() => router.push('/routine/fotos' as Href)} style={{ flex: 1 }} /> : null}
-      </View>
-    </Card>
+      ) : undefined}
+    >
+      <Card style={{ padding: space.m, gap: space.m }}>
+        {photos.length > 0 && !visible ? (
+          <Pressable accessibilityRole="button" onPress={() => void unlockPhotos()} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, padding: space.m, borderRadius: radius.m, backgroundColor: p.surfaceAlt }}>
+            <Ionicons name="lock-closed" size={20} color={p.accent} />
+            <Txt variant="heading" style={{ flex: 1 }}>Fotos entsperren</Txt>
+          </Pressable>
+        ) : first && last && first !== last ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Vergleich ansehen" onPress={all} style={{ flexDirection: 'row', gap: space.s }}>
+            {[first, last].map((ph, i) => (
+              <View key={ph.name} style={{ flex: 1, gap: space.xs }}>
+                <Image source={{ uri: ph.uri }} style={{ aspectRatio: 1, borderRadius: radius.m }} contentFit="cover" />
+                <Txt variant="small" muted>{i === 0 ? 'Vorher' : 'Jetzt'} · {ph.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</Txt>
+              </View>
+            ))}
+          </Pressable>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
+            {last ? (
+              <Image source={{ uri: last.uri }} style={{ width: 56, height: 72, borderRadius: radius.m }} contentFit="cover" />
+            ) : (
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="camera-outline" size={22} color={p.accent} />
+              </View>
+            )}
+            <Txt variant="small" muted style={{ flex: 1 }}>
+              {last ? 'Mach bald das nächste Foto im gleichen Licht, dann siehst du den Unterschied.' : 'Einmal pro Woche ein Foto zeigt dir, was sich verändert. Die Fotos bleiben nur auf deinem Handy.'}
+            </Txt>
+          </View>
+        )}
+        <Button label="Foto machen" kind="secondary" onPress={() => router.push('/routine/kamera' as Href)} />
+      </Card>
+    </Section>
   );
 }
 
@@ -316,15 +356,9 @@ export default function RoutineScreen() {
   const insets = useSafeAreaInsets();
   const { community } = useSession();
   const q = useRoutines();
-  const [prefs] = useRoutinePrefs();
   const swaps = useSwaps();
   const main = mainRoutine(q.data);
   useTourOnFocus('routine', !q.isPending);
-
-  // keep the scheduled reminders in line with the settings and the routine
-  useEffect(() => {
-    if (q.data) void syncReminders(prefs, main);
-  }, [q.data, prefs, main]);
 
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
@@ -333,6 +367,7 @@ export default function RoutineScreen() {
   const stats = overallStats(q.data);
   const today = main ? withSwaps(main, swaps.steps) : null;
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
+  const showWay = !!main && (planState(main) === 'running' || !main.plan || stats.totalDays > 0);
 
   return (
     <Screen tour="routine" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
@@ -358,7 +393,8 @@ export default function RoutineScreen() {
         </>
       ) : (
         <>
-          <TodayHero routine={today} days={stats.days} />
+          <TodayHero routine={today} />
+          {showWay ? <WayCard routine={main} days={stats.days} /> : null}
           <ReminderHint routine={main} />
           {plans.map((r) => <PlanCard key={r.id} routine={r} />)}
           {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}

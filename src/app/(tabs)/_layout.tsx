@@ -3,6 +3,7 @@
 // own stack, so headers and "back" work inside it. On top the assistant (components/tour.tsx).
 import { NativeTabs } from 'expo-router/native-tabs';
 import { TourOverlay } from '@/components/tour';
+import { useReminderSync } from '@/lib/plans';
 import { useReminderActions } from '@/lib/routine';
 import { usePalette } from '@/lib/theme';
 import { useRoutineWidgetSync } from '@/lib/widget-sync';
@@ -10,6 +11,7 @@ import { useRoutineWidgetSync } from '@/lib/widget-sync';
 export default function TabsLayout() {
   const p = usePalette();
   useRoutineWidgetSync();
+  useReminderSync();
   useReminderActions();
   return (
     <>

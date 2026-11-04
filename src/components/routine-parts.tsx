@@ -1,10 +1,11 @@
-// Small pieces shared by the routine screens: the progress ring, the minutes of a zone session, the picture of an exercise, the last 14 days,
-// "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a card for the start page.
+// Small pieces shared by the routine screens: the large picture card with its one action, the progress ring, the minutes of a zone session,
+// the picture of an exercise, the last 14 days, "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a
+// card for the start page.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
-import type { ReactNode } from 'react';
-import { Alert, Pressable, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import { useId, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
@@ -24,6 +25,83 @@ export const openPlan = (id: string) => router.push({ pathname: '/routine/plan',
 
 /** Total seconds of a routine. */
 export const routineSeconds = (routine: MemberRoutine) => routine.steps.reduce((sum, s) => sum + stepSeconds(s), 0);
+
+const ON_PICTURE = '#FFFFFF';
+const ON_PICTURE_SOFT = 'rgba(255,255,255,0.85)';
+
+/** Darkens a picture towards the bottom, so that white text reads on any picture. */
+function PictureFade() {
+  const id = `fade${useId().replace(/\W/g, '')}`;
+  return (
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#000000" stopOpacity={0.22} />
+          <Stop offset="0.38" stopColor="#000000" stopOpacity={0.08} />
+          <Stop offset="1" stopColor="#000000" stopOpacity={0.86} />
+        </LinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
+  );
+}
+
+/** The top of a routine page: a large picture (the accent colour without one), a label above, what it is and its one action below. */
+export function HeroCard({ imageUrl, label, title, line, minHeight = 280, children }: {
+  imageUrl: string | null; label: string; title: string; line: string; minHeight?: number; children?: ReactNode;
+}) {
+  const p = usePalette();
+  return (
+    <View style={{ minHeight, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: p.accent }}>
+      {imageUrl ? <Cover url={imageUrl} title="" aspect={null} rounded={0} style={StyleSheet.absoluteFill} /> : null}
+      <PictureFade />
+      <View style={{ flexGrow: 1, minHeight, justifyContent: 'space-between', gap: space.xl, padding: space.l }}>
+        <View style={{ alignSelf: 'flex-start', paddingHorizontal: space.m, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <Txt variant="caption" color={ON_PICTURE}>{label}</Txt>
+        </View>
+        <View style={{ gap: space.m }}>
+          <View style={{ gap: 2 }}>
+            <Txt variant="display" color={ON_PICTURE} numberOfLines={2}>{title}</Txt>
+            <Txt color={ON_PICTURE_SOFT}>{line}</Txt>
+          </View>
+          {children}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** The one action on a picture: white, so that it stands out on any picture and with any accent colour. */
+export function HeroButton({ label, icon, onPress, loading }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; loading?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ busy: !!loading }}
+      onPress={loading ? undefined : onPress}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s, minHeight: 54, borderRadius: radius.l, backgroundColor: ON_PICTURE, opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}
+    >
+      {loading ? <ActivityIndicator color="#111111" /> : (
+        <>
+          <Ionicons name={icon} size={22} color="#111111" />
+          <Txt variant="heading" color="#111111">{label}</Txt>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+/** Today is done: says so on the picture, in place of the action. */
+export function HeroDone({ text }: { text: string }) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, minHeight: 54 }}>
+      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: p.accent, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name="checkmark" size={26} color={p.onAccent} />
+      </View>
+      <Txt variant="heading" color={ON_PICTURE} style={{ flex: 1 }}>{text}</Txt>
+    </View>
+  );
+}
 
 export function ProgressRing({ size, share, stroke = 12, track, children }: { size: number; share: number; stroke?: number; track?: string; children?: ReactNode }) {
   const p = usePalette();
@@ -92,6 +170,8 @@ export function ZonesSection() {
   const recommended = (routines.data ?? []).filter((r) => r.plan?.kind === 'recommended' && r.steps.length > 0);
   const closed = recommended.length > 0 && !recommended.some((r) => planState(r) === 'over');
   const goal = recommended[0]?.plan ? goalLabel(recommended[0].plan.days) : '';
+  const under = recommended.find((r) => planState(r) === 'running')?.challenge;
+  const daysLeft = under ? under.days - (under.dayNumber ?? 1) + 1 : 0;
   const planOf = (zoneId: string) => routines.data?.find((r) => r.plan?.kind === 'zone' && r.plan.zoneId === zoneId);
   const line = (zoneId: string, exercises: number) => {
     const plan = planOf(zoneId);
@@ -104,7 +184,9 @@ export function ZonesSection() {
     const plan = planOf(zoneId);
     return closed && !(plan && planState(plan) === 'running');
   };
-  const closedText = `Das wird frei, sobald du deine empfohlene Routine (${goal}) geschafft hast.`;
+  const closedText = under
+    ? `Noch ${plural(daysLeft, 'Tag', 'Tage')} in deiner empfohlenen Routine, dann wird das frei.`
+    : `Das wird frei, sobald du deine empfohlene Routine (${goal}) geschafft hast.`;
   return (
     <TourTarget id="routine.zones">
       <Section title="Gezielt üben">
@@ -112,6 +194,8 @@ export function ZonesSection() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
           {zones.map((z) => {
             const off = stillClosed(z.id);
+            const picture = z.exercises.find((x) => x.thumbnailUrl)?.thumbnailUrl ?? null;
+            const onPicture = !!picture && !off;
             return (
               <Pressable
                 key={z.id}
@@ -128,15 +212,25 @@ export function ZonesSection() {
                   else router.push({ pathname: '/routine/zone', params: { id: z.id } } as unknown as Href);
                 }}
                 style={({ pressed }) => ({
-                  flexGrow: 1, flexBasis: '45%', minHeight: 72, justifyContent: 'center', gap: 2, padding: space.m, borderRadius: radius.l, borderWidth: 1,
-                  borderColor: p.line, backgroundColor: off ? p.surfaceAlt : p.surface, opacity: off ? 0.55 : pressed ? 0.85 : 1, transform: [{ scale: pressed && !off ? 0.98 : 1 }],
+                  flexGrow: 1, flexBasis: '45%', height: 124, borderRadius: radius.l, overflow: 'hidden',
+                  backgroundColor: p.surfaceAlt, opacity: pressed && !off ? 0.88 : 1, transform: [{ scale: pressed && !off ? 0.98 : 1 }],
                 })}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-                  <Txt variant="heading" numberOfLines={1} style={{ flexShrink: 1 }}>{z.name}</Txt>
-                  {off ? <Ionicons name="lock-closed" size={14} color={p.textMuted} /> : null}
+                {picture ? (
+                  <View style={[StyleSheet.absoluteFill, off ? { opacity: 0.18 } : null]}>
+                    <Cover url={picture} title="" aspect={null} rounded={0} style={StyleSheet.absoluteFill} />
+                  </View>
+                ) : null}
+                {onPicture ? <PictureFade /> : null}
+                {off ? (
+                  <View style={{ position: 'absolute', top: space.s, right: space.s, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: p.surface }}>
+                    <Ionicons name="lock-closed" size={15} color={p.textMuted} />
+                  </View>
+                ) : null}
+                <View style={{ flex: 1, justifyContent: 'flex-end', gap: 2, padding: space.m }}>
+                  <Txt variant="heading" numberOfLines={1} color={onPicture ? ON_PICTURE : off ? p.textMuted : p.text}>{z.name}</Txt>
+                  <Txt variant="small" color={onPicture ? ON_PICTURE_SOFT : p.textMuted}>{off ? 'Noch gesperrt' : line(z.id, z.exercises.length)}</Txt>
                 </View>
-                <Txt variant="small" muted>{off ? 'Noch gesperrt' : line(z.id, z.exercises.length)}</Txt>
               </Pressable>
             );
           })}
@@ -183,7 +277,7 @@ export function TwoWeeks({ days, plan }: { days: readonly string[]; plan?: Routi
                   accessibilityLabel={`${c.key}${isDone ? ', erledigt' : ''}`}
                   style={{
                     width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', opacity: future ? 0.45 : 1,
-                    backgroundColor: isDone ? p.accent : p.surface, borderWidth: isToday && !isDone ? 2 : 0, borderColor: p.accent,
+                    backgroundColor: isDone ? p.accent : p.surfaceAlt, borderWidth: isToday && !isDone ? 2 : 0, borderColor: p.accent,
                   }}
                 >
                   {isDone

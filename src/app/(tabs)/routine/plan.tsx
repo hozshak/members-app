@@ -1,6 +1,7 @@
-// One plan (lib/plans.ts): before the start what it is and, for a zone, the goal with a short word on why 30 days or 3 months; under
-// way the day, today's exercises (each can be swapped for another one of the zone, for today only), a new start and the way out; at
-// the end the after photo and the comparison with the photo of the start. The goal of a zone plan becomes "Mein Ziel".
+// One plan (lib/plans.ts), one page with one main action. Before the start: what it is, for a zone the goal with a short word on why 30 days
+// or 3 months, how the plan works and the first day. Under way: the day and the way into today's routine on a large picture, today's exercises
+// (each can be swapped for another one of the zone, for today only), all days of the plan at a glance, the photos before and after, a new start
+// and the way out at the very end. At the end: the result, the after photo and the comparison. The goal of a zone plan becomes "Mein Ziel".
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
@@ -8,15 +9,15 @@ import { useCallback, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinkedText } from '@/components/linked-text';
-import { openRoutine } from '@/components/routine-parts';
-import { Button, Card, Cover, ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
+import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openRoutine } from '@/components/routine-parts';
+import { Button, Card, Cover, ErrorView, Loading, MenuGroup, MenuRow, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { clearPlanPhotos, goalLabel, planLabel, planState, usePlanPhotos, usePlanStart, useSwaps, withSwaps } from '@/lib/plans';
-import { listPhotos, stepSeconds, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineStep } from '@/lib/routine';
+import { listPhotos, stepSeconds, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import { useZones, type MemberZoneExercise } from '@/lib/zones';
 
@@ -58,32 +59,51 @@ function GoalChoice({ days, longDays, value, onChange }: { days: number; longDay
   );
 }
 
+const HOW_IT_WORKS = [
+  { icon: 'camera-outline', title: 'Foto zum Start', text: 'Damit du später den Unterschied siehst. Es bleibt nur auf deinem Handy.' },
+  { icon: 'calendar-outline', title: 'Jeden Tag deine Übungen', text: 'Die App zeigt dir, was heute dran ist. Du machst einfach mit.' },
+  { icon: 'sparkles-outline', title: 'Foto am Ende', text: 'Am letzten Tag siehst du Vorher und Nachher nebeneinander.' },
+] as const;
+
+function HowItWorks() {
+  const p = usePalette();
+  return (
+    <View style={{ gap: space.m }}>
+      {HOW_IT_WORKS.map((step) => (
+        <View key={step.title} style={{ flexDirection: 'row', gap: space.m }}>
+          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={step.icon} size={22} color={p.accent} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt variant="heading">{step.title}</Txt>
+            <Txt variant="small" muted>{step.text}</Txt>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** One exercise of today: its picture, title, length and, in a zone plan, "Andere Übung". */
 function ExerciseRow({ step, swapped, onSwap, onRestore }: { step: RoutineStep; swapped: boolean; onSwap?: () => void; onRestore: () => void }) {
   const p = usePalette();
   return (
-    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
-      {step.videoThumbnailUrl ? (
-        <Cover url={step.videoThumbnailUrl} title={step.title} aspect={1} style={{ width: 56 }} />
-      ) : (
-        <View style={{ width: 56, height: 56, borderRadius: radius.m, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="body-outline" size={24} color={p.accent} />
-        </View>
-      )}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, minHeight: 72 }}>
+      <ExerciseThumb step={step} size={56} />
       <View style={{ flex: 1, gap: 2 }}>
         <Txt variant="heading" numberOfLines={2}>{step.title}</Txt>
         <Txt variant="small" muted>{clock(stepSeconds(step))}{swapped ? ' · Für heute getauscht' : ''}</Txt>
       </View>
       {swapped ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`${step.title}: zurück zur Übung aus dem Plan`} hitSlop={8} onPress={onRestore}>
-          <Ionicons name="arrow-undo-outline" size={22} color={p.accent} />
+        <Pressable accessibilityRole="button" accessibilityLabel={`${step.title}: zurück zur Übung aus dem Plan`} hitSlop={10} onPress={onRestore}>
+          <Ionicons name="arrow-undo-outline" size={24} color={p.accent} />
         </Pressable>
       ) : onSwap ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`${step.title}: andere Übung wählen`} hitSlop={8} onPress={onSwap}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${step.title}: andere Übung wählen`} hitSlop={10} onPress={onSwap}>
           <Ionicons name="swap-horizontal" size={24} color={p.accent} />
         </Pressable>
       ) : null}
-    </Card>
+    </View>
   );
 }
 
@@ -121,19 +141,83 @@ function SwapSheet({ zoneName, exercises, onPick, onClose }: { zoneName: string;
   );
 }
 
-/** The photo of the start against the photo of the end, side by side. */
-function Comparison({ before, after }: { before: ProgressPhoto; after: ProgressPhoto }) {
+/** A long plan shows its current four weeks; a short one all of its days. */
+const LONG_PLAN = 35;
+const PAGE_DAYS = 28;
+const PER_ROW = 7;
+
+/** All days of the plan at a glance: a tick on the days done, a ring around today, what is still to come is faint. */
+function PlanDays({ challenge, done }: { challenge: RoutineChallenge; done: readonly string[] }) {
   const p = usePalette();
-  const when = (ph: ProgressPhoto) => ph.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+  const today = localDay();
+  const finished = new Set(done);
+  const start = new Date(`${challenge.startDay}T12:00:00`);
+  const long = challenge.days > LONG_PLAN;
+  const page = long ? Math.floor(Math.max(0, (challenge.dayNumber ?? 1) - 1) / PAGE_DAYS) : 0;
+  const from = page * PAGE_DAYS;
+  const to = long ? Math.min(challenge.days, from + PAGE_DAYS) : challenge.days;
+  const cells = Array.from({ length: to - from }, (_, i) => {
+    const number = from + i + 1;
+    return { number, key: localDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + from + i, 12)) };
+  });
+  const rows = Array.from({ length: Math.ceil(cells.length / PER_ROW) }, (_, r) => cells.slice(r * PER_ROW, (r + 1) * PER_ROW));
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Alle Fotos ansehen" onPress={() => router.push('/routine/fotos' as Href)} style={{ flexDirection: 'row', gap: space.s }}>
-      {[{ ph: before, label: 'Vorher' }, { ph: after, label: 'Nachher' }].map(({ ph, label }) => (
-        <View key={label} style={{ flex: 1, gap: space.xs }}>
-          <Image source={{ uri: ph.uri }} style={{ aspectRatio: 3 / 4, borderRadius: radius.m }} contentFit="cover" accessibilityLabel={`${label}, ${when(ph)}`} />
-          <Txt variant="caption" color={p.accent}>{label}</Txt>
-          <Txt variant="small" muted>{when(ph)}</Txt>
+    <Card style={{ padding: space.m, gap: space.xs }}>
+      {long ? <Txt variant="small" muted style={{ textAlign: 'center', marginBottom: space.xs }}>Tag {from + 1} bis {to} von {challenge.days}</Txt> : null}
+      {rows.map((row, r) => (
+        <View key={r} style={{ flexDirection: 'row' }}>
+          {row.map((c) => {
+            const isDone = finished.has(c.key);
+            const isToday = c.key === today;
+            const coming = c.key > today;
+            return (
+              <View key={c.key} style={{ width: `${100 / PER_ROW}%`, alignItems: 'center', paddingVertical: 3 }}>
+                <View
+                  accessibilityLabel={`Tag ${c.number}${isDone ? ', erledigt' : isToday ? ', heute' : ''}`}
+                  style={{
+                    width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', opacity: coming ? 0.45 : 1,
+                    backgroundColor: isDone ? p.accent : p.surfaceAlt, borderWidth: isToday && !isDone ? 2 : 0, borderColor: p.accent,
+                  }}
+                >
+                  {isDone
+                    ? <Ionicons name="checkmark" size={20} color={p.onAccent} />
+                    : <Txt variant="small" color={isToday ? p.accent : p.textMuted} style={{ fontVariant: ['tabular-nums'], fontWeight: isToday ? '700' : '400' }}>{c.number}</Txt>}
+                </View>
+              </View>
+            );
+          })}
         </View>
       ))}
+    </Card>
+  );
+}
+
+/** One side of "Vorher und Nachher": the photo, or what is to do here. */
+function PhotoSlot({ label, photo, empty, onPress }: { label: string; photo: ProgressPhoto | undefined; empty: { icon: keyof typeof Ionicons.glyphMap; text: string }; onPress?: () => void }) {
+  const p = usePalette();
+  const when = photo?.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={photo ? `${label}, ${when}` : `${label}: ${empty.text}`}
+      accessibilityState={{ disabled: !onPress }}
+      onPress={onPress}
+      style={{ flex: 1, aspectRatio: 3 / 4, borderRadius: radius.l, overflow: 'hidden', backgroundColor: p.surface, borderWidth: photo ? 0 : 1, borderColor: p.line }}
+    >
+      {photo ? (
+        <>
+          <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors />
+          <View style={{ position: 'absolute', left: space.s, bottom: space.s, paddingHorizontal: space.s, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)' }}>
+            <Txt variant="small" color="#FFFFFF" style={{ fontSize: 12, lineHeight: 16, fontWeight: '600' }}>{label} · {when}</Txt>
+          </View>
+        </>
+      ) : (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.s, padding: space.m }}>
+          <Ionicons name={empty.icon} size={28} color={onPress ? p.accent : p.textMuted} />
+          <Txt variant="heading">{label}</Txt>
+          <Txt variant="small" color={onPress ? p.accent : p.textMuted} style={{ textAlign: 'center' }}>{empty.text}</Txt>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -162,8 +246,12 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   const after = all.find((x) => x.name === photos.end);
   const exercises = (zones.data ?? []).find((z) => z.id === info.zoneId)?.exercises ?? [];
   const lastDay = !!ch && ch.dayNumber !== null && ch.dayNumber >= ch.days;
+  const doneToday = routine.stats.doneToday;
   const busy = plan.start.isPending || plan.leave.isPending;
   const error = plan.start.error ?? plan.leave.error;
+  const picture = today.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
+  const todaySec = today.steps.reduce((sum, s) => sum + stepSeconds(s), 0);
+  const seePhotos = () => router.push('/routine/fotos' as Href);
 
   const start = () => plan.start.mutate(isZone ? goal : undefined, {
     onSuccess: () => {
@@ -172,10 +260,16 @@ function Plan({ routine }: { routine: MemberRoutine }) {
       if (Platform.OS !== 'web') camera(routine.id, 'start');
     },
   });
+  const startAgain = () => plan.start.mutate(undefined, {
+    onSuccess: () => {
+      clearPlanPhotos(routine.id);
+      if (Platform.OS !== 'web') camera(routine.id, 'start');
+    },
+  });
   const restart = () => Alert.alert(
     'Von vorne beginnen?',
     'Heute ist dann wieder Tag 1. Deine erledigten Tage bleiben erhalten.',
-    [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Neu starten', style: 'destructive', onPress: () => plan.start.mutate(undefined, { onSuccess: () => { clearPlanPhotos(routine.id); if (Platform.OS !== 'web') camera(routine.id, 'start'); } }) }],
+    [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Neu starten', style: 'destructive', onPress: startAgain }],
   );
   const leave = () => Alert.alert(
     'Plan beenden?',
@@ -183,111 +277,117 @@ function Plan({ routine }: { routine: MemberRoutine }) {
     [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Beenden', style: 'destructive', onPress: () => plan.leave.mutate(undefined, { onSuccess: () => router.back() }) }],
   );
 
-  return (
-    <Screen onRefresh={undefined} contentStyle={{ gap: space.xl }}>
-      <View style={{ gap: space.xs }}>
-        <Txt variant="caption" color={p.accent}>{planLabel(routine)}</Txt>
-        <Txt variant="display">{routine.title}</Txt>
-        {routine.description ? <LinkedText text={routine.description} muted style={{ marginTop: space.xs }} /> : null}
-      </View>
+  const beforeAfter = (
+    <Section title="Vorher und Nachher">
+      {(before || after) && !photosVisible ? (
+        <Button label="Fotos entsperren" kind="secondary" onPress={() => void unlockPhotos()} />
+      ) : (
+        <View style={{ flexDirection: 'row', gap: space.s }}>
+          <PhotoSlot
+            label="Vorher"
+            photo={before}
+            empty={state === 'over' ? { icon: 'image-outline', text: 'Kein Foto vom Start' } : { icon: 'camera-outline', text: 'Jetzt Foto machen' }}
+            onPress={before ? seePhotos : state === 'over' ? undefined : () => camera(routine.id, 'start')}
+          />
+          <PhotoSlot
+            label="Nachher"
+            photo={after}
+            empty={lastDay || state === 'over' ? { icon: 'camera-outline', text: 'Jetzt Foto machen' } : { icon: 'lock-closed-outline', text: 'Am letzten Tag deines Plans' }}
+            onPress={after ? seePhotos : lastDay || state === 'over' ? () => camera(routine.id, 'end') : undefined}
+          />
+        </View>
+      )}
+    </Section>
+  );
 
+  return (
+    <Screen contentStyle={{ gap: space.xl }}>
       {error ? <Txt color={p.danger}>{errorText(error)}</Txt> : null}
 
       {state === 'open' ? (
         <>
+          <HeroCard imageUrl={picture} minHeight={240} label={planLabel(routine)} title={routine.title} line={`${goalLabel(isZone ? goal : info.days)}, jeden Tag deine Übungen`} />
+          {routine.description ? <LinkedText text={routine.description} muted /> : null}
           {isZone && info.longDays ? (
             <Section title="Dein Ziel">
               <GoalChoice days={info.days} longDays={info.longDays} value={goal} onChange={chooseGoal} />
             </Section>
-          ) : (
-            <Txt muted>{goalLabel(info.days)}, jeden Tag mit eigenen Übungen.</Txt>
-          )}
-          <Card style={{ flexDirection: 'row', gap: space.m, padding: space.l, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
-            <Ionicons name="camera-outline" size={24} color={p.accent} />
-            <Txt style={{ flex: 1 }}>Zum Start machst du ein Foto, am Ende noch eins. So siehst du den Unterschied. Die Fotos bleiben nur auf deinem Handy.</Txt>
-          </Card>
-          <Button label="Plan starten" onPress={start} loading={busy} />
-          {isZone ? (
-            <Button
-              label="Nur kurz üben, ohne Plan"
-              kind="ghost"
-              onPress={() => router.push({ pathname: '/routine/zone', params: { id: info.zoneId ?? '' } } as unknown as Href)}
-            />
           ) : null}
-          <Section title="Tag 1">
-            <View style={{ gap: space.s }}>
+          <Section title="So läuft dein Plan">
+            <HowItWorks />
+          </Section>
+          <View style={{ gap: space.xs }}>
+            <Button label="Plan starten" onPress={start} loading={busy} />
+            {isZone ? (
+              <Button
+                label="Nur kurz üben, ohne Plan"
+                kind="ghost"
+                onPress={() => router.push({ pathname: '/routine/zone', params: { id: info.zoneId ?? '' } } as unknown as Href)}
+              />
+            ) : null}
+          </View>
+          <Section title="Dein erster Tag" action={<Txt variant="small" muted>{plural(routine.steps.length, 'Übung', 'Übungen')}</Txt>}>
+            <MenuGroup>
               {routine.steps.map((s) => <ExerciseRow key={s.id} step={s} swapped={false} onRestore={() => undefined} />)}
-            </View>
+            </MenuGroup>
           </Section>
         </>
       ) : null}
 
       {state === 'running' && ch ? (
         <>
-          <View style={{ gap: space.xs }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <Txt variant="title">Tag {ch.dayNumber} von {ch.days}</Txt>
-              <Txt variant="small" muted>{ch.doneDays} erledigt</Txt>
-            </View>
-            <ProgressBar value={(ch.dayNumber ?? 0) / ch.days} style={{ height: 10, borderRadius: 5 }} />
-          </View>
-          {!before ? (
-            <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
-              <Ionicons name="camera-outline" size={24} color={p.accent} />
-              <Txt style={{ flex: 1 }}>Noch kein Vorher-Foto</Txt>
-              <Button label="Foto machen" kind="secondary" onPress={() => camera(routine.id, 'start')} style={{ minHeight: 40, paddingHorizontal: space.m }} />
-            </Card>
-          ) : null}
-          <Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')} · {minutes(today.steps.reduce((sum, s) => sum + stepSeconds(s), 0))}</Txt>}>
-            <View style={{ gap: space.s }}>
+          <HeroCard imageUrl={picture} minHeight={260} label={planLabel(routine)} title={`Tag ${ch.dayNumber} von ${ch.days}`} line={`${routine.title} · ${plural(ch.doneDays, 'Tag', 'Tage')} erledigt`}>
+            <ProgressBar value={(ch.dayNumber ?? 0) / ch.days} style={{ height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            {doneToday
+              ? <HeroDone text="Heute erledigt. Bis morgen!" />
+              : <HeroButton label={`Routine starten · ${minutes(todaySec)}`} icon="play" onPress={() => openRoutine(routine.id)} />}
+          </HeroCard>
+          {lastDay && doneToday && !after ? <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} /> : null}
+          <Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')}</Txt>}>
+            <MenuGroup>
               {today.steps.map((s) => (
                 <ExerciseRow
                   key={s.id}
                   step={s}
                   swapped={!!swaps.steps[s.id]}
-                  onSwap={isZone && exercises.length > 0 && !routine.stats.doneToday ? () => setSwapping(s.id) : undefined}
+                  onSwap={isZone && exercises.length > 0 && !doneToday ? () => setSwapping(s.id) : undefined}
                   onRestore={() => swaps.restore(s.id)}
                 />
               ))}
-            </View>
+            </MenuGroup>
           </Section>
-          {routine.stats.doneToday ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s, minHeight: 50 }}>
-              <Ionicons name="checkmark-circle" size={22} color={p.accent} />
-              <Txt variant="heading">Heute erledigt. Bis morgen!</Txt>
-            </View>
-          ) : <Button label="Routine starten" onPress={() => openRoutine(routine.id)} />}
-          {lastDay && routine.stats.doneToday && !after ? <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} /> : null}
+          <Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
+            <PlanDays challenge={ch} done={routine.stats.days} />
+          </Section>
+          {beforeAfter}
+          {routine.description ? (
+            <Section title="Über diesen Plan">
+              <LinkedText text={routine.description} muted />
+            </Section>
+          ) : null}
+          <MenuGroup>
+            <MenuRow icon="refresh-outline" label={isZone ? 'Von vorne beginnen' : 'Zurücksetzen und neu beginnen'} onPress={restart} />
+            <MenuRow icon="close-circle-outline" label="Plan beenden" onPress={leave} />
+          </MenuGroup>
         </>
       ) : null}
 
       {state === 'over' && ch ? (
         <>
-          <Card style={{ alignItems: 'center', gap: space.s, padding: space.xl, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
-            <Ionicons name="trophy" size={40} color={p.accent} />
-            <Txt variant="title" style={{ textAlign: 'center' }}>{ch.completed ? 'Geschafft!' : 'Dein Plan ist zu Ende'}</Txt>
-            <Txt muted style={{ textAlign: 'center' }}>{ch.doneDays} von {ch.days} Tagen erledigt</Txt>
-          </Card>
-          {!after ? (
-            <Card style={{ gap: space.m, padding: space.l }}>
-              <Txt>Jetzt das Nachher-Foto: gleiches Licht, gleicher Abstand wie beim ersten.</Txt>
-              <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} />
-            </Card>
-          ) : null}
-          {before && after ? (
-            <Section title="Dein Unterschied">
-              {photosVisible ? <Comparison before={before} after={after} /> : <Button label="Fotos entsperren" kind="secondary" onPress={() => void unlockPhotos()} />}
-            </Section>
-          ) : null}
-          <Button label="Noch einmal starten" kind="secondary" onPress={() => plan.start.mutate(undefined, { onSuccess: () => { clearPlanPhotos(routine.id); if (Platform.OS !== 'web') camera(routine.id, 'start'); } })} loading={busy} />
+          <HeroCard imageUrl={picture} minHeight={240} label="Plan beendet" title={ch.completed ? 'Geschafft!' : 'Dein Plan ist zu Ende'} line={`${routine.title} · ${ch.doneDays} von ${ch.days} Tagen erledigt`}>
+            {!after ? <HeroButton label="Nachher-Foto machen" icon="camera" onPress={() => camera(routine.id, 'end')} /> : null}
+          </HeroCard>
+          {beforeAfter}
+          <Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
+            <PlanDays challenge={ch} done={routine.stats.days} />
+          </Section>
+          <View style={{ gap: space.m }}>
+            <Button label="Noch einmal starten" kind="secondary" onPress={startAgain} loading={busy} />
+            <MenuGroup>
+              <MenuRow icon="close-circle-outline" label="Plan beenden" onPress={leave} />
+            </MenuGroup>
+          </View>
         </>
-      ) : null}
-
-      {state !== 'open' ? (
-        <View style={{ gap: space.xs }}>
-          {state === 'running' ? <Button label={isZone ? 'Von vorne beginnen' : 'Zurücksetzen und neu beginnen'} kind="ghost" onPress={restart} /> : null}
-          <Button label="Plan beenden" kind="ghost" onPress={leave} />
-        </View>
       ) : null}
 
       {swapping ? (

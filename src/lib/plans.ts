@@ -6,7 +6,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { localDay } from './nav';
-import { routineKey, type MemberRoutine, type RoutineChallenge, type RoutineStats, type RoutineStep } from './routine';
+import {
+  routineKey, routinePrefsLoaded, syncReminders, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineChallenge, type RoutineStats, type RoutineStep,
+} from './routine';
 import { useApi } from './session';
 import { getItem, setItem } from './storage';
 
@@ -84,6 +86,17 @@ export function usePlanStart(routineId: string) {
       onSuccess: refresh,
     }),
   };
+}
+
+/** In the member area: the reminders of the coming days are planned at every start of the app and whenever the routine changes. */
+export function useReminderSync(): void {
+  const q = useRoutines();
+  const [prefs] = useRoutinePrefs();
+  const main = mainRoutine(q.data);
+  const loaded = q.data !== undefined;
+  useEffect(() => {
+    if (loaded && routinePrefsLoaded()) void syncReminders(prefs, main);
+  }, [loaded, prefs, main]);
 }
 
 /** The first days of a new day after a night in the background: today's exercises and "heute erledigt" are loaded again. */
