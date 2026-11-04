@@ -10,7 +10,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FrameRing, FramesPopup } from '@/components/frame-ring';
+import { FrameInitial, FrameRing, FramesPopup } from '@/components/frame-ring';
 import { TourTarget } from '@/components/tour';
 import { Button, MenuGroup, MenuRow, Screen, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
@@ -72,28 +72,28 @@ export default function ProfileScreen() {
 
   return (
     <Screen tour="profil" contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
-      <TourTarget id="profil.frame" style={{ gap: space.m, alignItems: 'flex-start' }}>
+      <TourTarget id="profil.frame" style={{ gap: space.m, alignItems: 'center' }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Profilfoto ändern" onPress={photoMenu}>
-          <FrameRing frame={frame} size={92}>
+          <FrameRing frame={frame} size={164}>
             {me?.avatarUrl ? (
               <Image source={{ uri: api.url(me.avatarUrl), headers: api.mediaHeaders() }} style={StyleSheet.absoluteFill} contentFit="cover" />
             ) : (
-              <Txt variant="display" color={p.accent}>{initial}</Txt>
+              <FrameInitial letter={initial} size={44} />
             )}
             {busy ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }]}><ActivityIndicator color="#FFFFFF" /></View> : null}
           </FrameRing>
-          <Txt variant="small" color={p.accent} style={{ marginTop: space.xs, textAlign: 'center' }}>Foto ändern</Txt>
+          <Txt variant="small" color={p.accent} style={{ textAlign: 'center' }}>Foto ändern</Txt>
         </Pressable>
-        <View style={{ gap: 2 }}>
-          <Txt variant="display">{name}</Txt>
+        <View style={{ gap: 2, alignItems: 'center' }}>
+          <Txt variant="display" style={{ textAlign: 'center' }}>{name}</Txt>
           {me?.email && me.email !== name ? <Txt muted>{me.email}</Txt> : null}
-          <Txt variant="small" muted>Mitglied bei {community.name}{me?.memberNo ? ` · Nr. ${me.memberNo}` : ''}</Txt>
+          <Txt variant="small" muted style={{ textAlign: 'center' }}>Mitglied bei {community.name}{me?.memberNo ? ` · Nr. ${me.memberNo}` : ''}</Txt>
           {hasRoutines ? (
             <Pressable
               accessibilityRole="button"
               accessibilityHint="Erklärt den Rahmen und zeigt alle Stufen"
               onPress={() => setFramesOpen(true)}
-              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 36, marginTop: space.xs, opacity: pressed ? 0.6 : 1 })}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, minHeight: 36, marginTop: space.xs, opacity: pressed ? 0.6 : 1 })}
             >
               <Txt variant="small" style={{ fontWeight: '700', flexShrink: 1 }}>
                 {frame.name}
