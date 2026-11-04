@@ -9,7 +9,7 @@ import { radius, space, usePalette } from '@/lib/theme';
 import { Button, Txt } from './ui';
 
 /** The photo's diameter as a share of the frame's picture (all pictures in assets/images/frames are made for this). */
-const PHOTO_SHARE = 0.595;
+const PHOTO_SHARE = 0.5;
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia, serif' });
 
 /** `size`: the whole picture with everything around the photo; the photo (`children`) takes the round opening in its middle. */
@@ -51,8 +51,8 @@ export function FramesPopup({ days, initial, onClose }: { days: number; initial:
               const here = f.level === current;
               return (
                 <View key={f.name} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, paddingVertical: space.xs, paddingLeft: space.xs, paddingRight: space.m, borderRadius: radius.l, borderWidth: 1, borderColor: here ? p.accent : p.line, backgroundColor: here ? p.accentSoft : 'transparent' }}>
-                  <FrameRing frame={f} size={88}>
-                    <FrameInitial letter={initial} size={24} />
+                  <FrameRing frame={f} size={92}>
+                    <FrameInitial letter={initial} size={22} />
                   </FrameRing>
                   <View style={{ width: 1, alignSelf: 'stretch', marginVertical: space.m, backgroundColor: p.line }} />
                   <View style={{ flex: 1, gap: 1 }}>

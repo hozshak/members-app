@@ -74,7 +74,7 @@ export default function ProfileScreen() {
     <Screen tour="profil" contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <TourTarget id="profil.frame" style={{ gap: space.m, alignItems: 'center' }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Profilfoto ändern" onPress={photoMenu}>
-          <FrameRing frame={frame} size={164}>
+          <FrameRing frame={frame} size={176}>
             {me?.avatarUrl ? (
               <Image source={{ uri: api.url(me.avatarUrl), headers: api.mediaHeaders() }} style={StyleSheet.absoluteFill} contentFit="cover" />
             ) : (
@@ -82,7 +82,7 @@ export default function ProfileScreen() {
             )}
             {busy ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }]}><ActivityIndicator color="#FFFFFF" /></View> : null}
           </FrameRing>
-          <Txt variant="small" color={p.accent} style={{ textAlign: 'center' }}>Foto ändern</Txt>
+          <Txt variant="small" color={p.accent} style={{ textAlign: 'center', marginTop: -space.m }}>Foto ändern</Txt>
         </Pressable>
         <View style={{ gap: 2, alignItems: 'center' }}>
           <Txt variant="display" style={{ textAlign: 'center' }}>{name}</Txt>

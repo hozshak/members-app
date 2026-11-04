@@ -357,7 +357,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
               )}
               {newFrame ? (
                 <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, borderRadius: radius.l, backgroundColor: p.accentSoft }}>
-                  <FrameRing frame={newFrame} size={84}><Ionicons name="person" size={24} color={p.accent} /></FrameRing>
+                  <FrameRing frame={newFrame} size={96}><Ionicons name="person" size={24} color={p.accent} /></FrameRing>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Txt variant="caption" color={p.accent}>Neuer Rahmen</Txt>
                     <Txt variant="heading">{newFrame.name}: {newFrame.line}</Txt>
