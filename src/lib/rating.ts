@@ -1,5 +1,5 @@
 // When the app asks for a rating (owner 04.11.2026): once after a month of use, counted from the first time the app was opened on this phone.
-// "Später" asks again two weeks later; a rating or "Nein danke" ends it.
+// "Später" asks again two weeks later; a rating ends it.
 import { localDay } from './nav';
 import { getItem, setItem } from './storage';
 

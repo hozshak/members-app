@@ -133,17 +133,6 @@ export function RatingPrompt({ buttons }: { buttons: MemberHomeButton[] }) {
             }}
             style={{ alignSelf: 'stretch' }}
           />
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => {
-              void ratingDone();
-              setDue(false);
-            }}
-            style={{ minHeight: 32, justifyContent: 'center' }}
-          >
-            <Txt variant="small" muted>Nein danke</Txt>
-          </Pressable>
         </View>
       </View>
     </Modal>
