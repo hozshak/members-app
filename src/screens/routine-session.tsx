@@ -360,7 +360,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
                   <FrameRing frame={newFrame} size={56}><Ionicons name="person" size={22} color={p.accent} /></FrameRing>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Txt variant="caption" color={p.accent}>Neuer Rahmen</Txt>
-                    <Txt variant="heading">{newFrame.name}: Sieh ihn dir in deinem Profil an.</Txt>
+                    <Txt variant="heading">{newFrame.name}: {newFrame.line}</Txt>
                   </View>
                 </View>
               ) : null}

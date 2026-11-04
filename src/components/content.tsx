@@ -1,12 +1,14 @@
 // Cards of the member area: a product (programme) with its progress, a category, a "continue watching" tile and one
 // lesson row (video, text, PDF) with its state. Locked things are shown, but not as links.
 import { Ionicons } from '@expo/vector-icons';
-import { View } from 'react-native';
+import { Image } from 'expo-image';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { clock, minutes, plural } from '@/lib/format';
 import { useOpen } from '@/lib/nav';
-import { space, usePalette } from '@/lib/theme';
+import { useSession } from '@/lib/session';
+import { radius, space, usePalette } from '@/lib/theme';
 import type { CategoryCard, MemberProduct, VideoCard } from '@/lib/types';
-import { Badge, Card, Cover, ProgressBar, Txt } from './ui';
+import { Badge, Card, Cover, PictureFade, ProgressBar, Txt } from './ui';
 
 export function ProductTile({ product }: { product: MemberProduct }) {
   const open = useOpen();
@@ -80,6 +82,47 @@ export function ContinueTile({ video }: { video: VideoCard }) {
 }
 
 const KIND_LABEL: Record<VideoCard['kind'], string> = { video: 'Video', video_text: 'Video', text: 'Text', pdf: 'PDF' };
+
+export const NEW_TILE_WIDTH = 176;
+const NEW_TILE_HEIGHT = 300;
+
+/**
+ * A tile of "Neu für dich": upright, to swipe through like pictures (Mailin 04.11.2026). The thumbnails are wide and often carry their title, so
+ * the whole picture stands in the tile on a blurred copy of itself instead of being cut.
+ */
+export function NewTile({ video }: { video: VideoCard }) {
+  const p = usePalette();
+  const open = useOpen();
+  const { api } = useSession();
+  const source = video.thumbnailUrl && api ? { uri: api.url(video.thumbnailUrl), headers: api.mediaHeaders() } : null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${video.title}${video.done ? ', erledigt' : ''}`}
+      accessibilityState={{ disabled: video.locked }}
+      onPress={video.locked ? undefined : () => open.lesson(video.id)}
+      style={({ pressed }) => ({
+        width: NEW_TILE_WIDTH, height: NEW_TILE_HEIGHT, borderRadius: radius.l, overflow: 'hidden', backgroundColor: p.accent,
+        opacity: video.locked ? 0.55 : pressed ? 0.9 : 1, transform: [{ scale: pressed && !video.locked ? 0.98 : 1 }],
+      })}
+    >
+      {source ? (
+        <>
+          <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={22} accessibilityIgnoresInvertColors />
+          <Image source={source} style={[StyleSheet.absoluteFill, { bottom: 76 }]} contentFit="contain" transition={150} accessibilityIgnoresInvertColors />
+        </>
+      ) : null}
+      <PictureFade />
+      <View style={{ position: 'absolute', top: space.s, left: space.s, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: video.done ? p.accent : 'rgba(0,0,0,0.5)' }}>
+        <Ionicons name={video.locked ? 'lock-closed' : video.done ? 'checkmark' : 'play'} size={15} color={video.done && !video.locked ? p.onAccent : '#FFFFFF'} />
+      </View>
+      <View style={{ position: 'absolute', left: space.m, right: space.m, bottom: space.m, gap: 2 }}>
+        <Txt variant="heading" color="#FFFFFF" numberOfLines={3}>{video.title}</Txt>
+        <Txt variant="small" color="rgba(255,255,255,0.85)">{KIND_LABEL[video.kind]}{video.durationSec ? ` · ${clock(video.durationSec)}` : ''}</Txt>
+      </View>
+    </Pressable>
+  );
+}
 
 /** One lesson in a list: its thumbnail, number or check, title, kind and length; locked lessons are not tappable. */
 export function LessonRow({ video, index }: { video: VideoCard; index: number }) {

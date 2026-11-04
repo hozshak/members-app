@@ -2,9 +2,10 @@
 // community's media need it), a progress bar, loading and error states. Colours come from usePalette().
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Children, type ComponentProps, type ReactNode } from 'react';
+import { Children, useId, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { errorText } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { radius, space, type, usePalette } from '@/lib/theme';
@@ -101,6 +102,23 @@ export function Cover({ url, title, aspect = 16 / 9, style, rounded = radius.m, 
       )}
       {children}
     </View>
+  );
+}
+
+/** Darkens a picture towards the bottom, so that white text reads on any picture. */
+export function PictureFade() {
+  const id = `fade${useId().replace(/\W/g, '')}`;
+  return (
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#000000" stopOpacity={0.22} />
+          <Stop offset="0.38" stopColor="#000000" stopOpacity={0.08} />
+          <Stop offset="1" stopColor="#000000" stopOpacity={0.86} />
+        </LinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
   );
 }
 

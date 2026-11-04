@@ -96,7 +96,7 @@ export default function ProfileScreen() {
               style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 36, marginTop: space.xs, opacity: pressed ? 0.6 : 1 })}
             >
               <Txt variant="small" style={{ fontWeight: '700', flexShrink: 1 }}>
-                {frame.level === 0 ? 'Dein Rahmen' : `${frame.name}-Rahmen`}
+                {frame.name}
                 {frame.next ? ` · noch ${frame.next.days === 1 ? '1 Übungstag' : `${frame.next.days} Übungstage`} bis ${frame.next.name}` : ''}
               </Txt>
               <Ionicons name="alert-circle" size={22} color={p.accent} />

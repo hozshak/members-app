@@ -272,8 +272,8 @@ function Plan({ routine }: { routine: MemberRoutine }) {
     [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Neu starten', style: 'destructive', onPress: startAgain }],
   );
   const leave = () => Alert.alert(
-    'Plan beenden?',
-    'Deine erledigten Tage bleiben erhalten. Du kannst den Plan jederzeit neu starten.',
+    'Routine beenden?',
+    'Deine erledigten Tage bleiben erhalten. Du kannst die Routine jederzeit neu starten.',
     [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Beenden', style: 'destructive', onPress: () => plan.leave.mutate(undefined, { onSuccess: () => router.back() }) }],
   );
 
@@ -367,7 +367,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
           ) : null}
           <MenuGroup>
             <MenuRow icon="refresh-outline" label={isZone ? 'Von vorne beginnen' : 'Zurücksetzen und neu beginnen'} onPress={restart} />
-            <MenuRow icon="close-circle-outline" label="Plan beenden" onPress={leave} />
+            <MenuRow icon="close-circle-outline" label="Routine beenden" onPress={leave} />
           </MenuGroup>
         </>
       ) : null}
@@ -384,7 +384,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
           <View style={{ gap: space.m }}>
             <Button label="Noch einmal starten" kind="secondary" onPress={startAgain} loading={busy} />
             <MenuGroup>
-              <MenuRow icon="close-circle-outline" label="Plan beenden" onPress={leave} />
+              <MenuRow icon="close-circle-outline" label="Routine beenden" onPress={leave} />
             </MenuGroup>
           </View>
         </>

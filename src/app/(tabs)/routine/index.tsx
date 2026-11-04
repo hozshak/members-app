@@ -1,14 +1,14 @@
 // Routine overview, with one main action and the most important first: today on a large picture with the way in; where the member stands (the
 // plan with its 14 days, a tap leads to the whole plan; without a plan the last 14 days); a small hint that recommends the reminder while it is
 // off; the exercises to tick off (all ticked = day done, a tap on one takes its tick back and opens the day again); the progress photos
-// (optionally behind Face ID); "Gezielt üben" (plans and short sessions by zone); the member's own goal; a challenge when the coach made the
-// routine one ("Tag 12 von 30"). The settings of the reminders are under "Profil".
+// (optionally behind Face ID); the member's own goal; "Gezielt üben" (plans and short sessions by zone); a challenge when the coach made the
+// routine one ("Tag 12 von 30"). A tap on the flame says what it counts. The settings of the reminders are under "Profil".
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
-import { Alert, Platform, Pressable, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderPopup } from '@/components/reminder-popup';
 import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openPlan, openRoutine, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
@@ -18,7 +18,7 @@ import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
-import { goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
+import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
 import {
   allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
   type MemberRoutine, type ProgressPhoto, type RoutineStats,
@@ -80,11 +80,59 @@ function ReminderHint({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** "Mein Ziel": small, below everything else: the goal in the member's words, a bar and a sentence on how close it is. */
-function GoalCard({ stats }: { stats: RoutineStats }) {
+/** A tap on the flame: what it counts. */
+function StreakPopup({ stats, onClose }: { stats: RoutineStats; onClose: () => void }) {
+  const p = usePalette();
+  return (
+    <Modal transparent visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, justifyContent: 'center', padding: space.l }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Schließen" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+        <View accessibilityViewIsModal style={{ alignItems: 'center', gap: space.m, padding: space.xl, borderRadius: radius.xl, backgroundColor: p.surface }}>
+          <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="flame" size={40} color={p.accent} />
+          </View>
+          <Txt variant="title" style={{ textAlign: 'center' }}>{plural(stats.streak, 'Tag', 'Tage')} in Folge</Txt>
+          <Txt muted style={{ textAlign: 'center' }}>Die Flamme zählt die Tage, an denen du deine Routine ohne Pause gemacht hast. Lässt du einen Tag aus, fängt sie wieder von vorn an.</Txt>
+          <View style={{ flexDirection: 'row', alignSelf: 'stretch', gap: space.m }}>
+            {[{ value: stats.bestStreak, label: 'Dein bester Lauf' }, { value: stats.totalDays, label: 'Tage insgesamt' }].map((x) => (
+              <View key={x.label} style={{ flex: 1, alignItems: 'center', gap: 2, padding: space.m, borderRadius: radius.m, backgroundColor: p.surfaceAlt }}>
+                <Txt variant="title" style={{ fontVariant: ['tabular-nums'] }}>{x.value}</Txt>
+                <Txt variant="small" muted style={{ textAlign: 'center' }}>{x.label}</Txt>
+              </View>
+            ))}
+          </View>
+          <Button label="Alles klar" onPress={onClose} style={{ alignSelf: 'stretch' }} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * "Mein Ziel": the goal in the member's words, a bar and a sentence on how close it is. Grey and closed until the recommended plan is finished
+ * (`closedText`, owner 04.11.2026).
+ */
+function GoalCard({ stats, closedText }: { stats: RoutineStats; closedText: string | null }) {
   const p = usePalette();
   const [goal] = useGoal();
   const edit = () => router.push('/routine/ziel' as Href);
+  if (closedText) {
+    return (
+      <Card
+        onPress={() => Alert.alert('Noch gesperrt', closedText)}
+        accessibilityLabel={`Mein Ziel, noch gesperrt. ${closedText}`}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, backgroundColor: p.surfaceAlt, borderColor: 'transparent' }}
+      >
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.surface, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="lock-closed" size={20} color={p.textMuted} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt variant="heading" color={p.textMuted}>Mein Ziel</Txt>
+          <Txt variant="small" muted>{closedText}</Txt>
+        </View>
+      </Card>
+    );
+  }
   if (!goal) {
     return (
       <Card onPress={edit} accessibilityLabel="Ziel festlegen" style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
@@ -358,6 +406,7 @@ export default function RoutineScreen() {
   const q = useRoutines();
   const swaps = useSwaps();
   const main = mainRoutine(q.data);
+  const [flameOpen, setFlameOpen] = useState(false);
   useTourOnFocus('routine', !q.isPending);
 
   if (q.isPending) return <Loading />;
@@ -368,18 +417,28 @@ export default function RoutineScreen() {
   const today = main ? withSwaps(main, swaps.steps) : null;
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
   const showWay = !!main && (planState(main) === 'running' || !main.plan || stats.totalDays > 0);
+  // a zone plan already under way keeps its goal
+  const goalClosed = q.data.some((r) => r.plan?.kind === 'zone' && planState(r) === 'running') ? null : closedUntilRecommended(q.data);
 
   return (
     <Screen tour="routine" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
         <Txt variant="display">Routine</Txt>
         {stats.streak > 0 ? (
-          <View accessibilityLabel={`${plural(stats.streak, 'Tag', 'Tage')} in Folge`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: p.accentSoft }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${plural(stats.streak, 'Tag', 'Tage')} in Folge`}
+            accessibilityHint="Erklärt, was die Flamme bedeutet"
+            hitSlop={8}
+            onPress={() => setFlameOpen(true)}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: p.accentSoft, opacity: pressed ? 0.7 : 1 })}
+          >
             <Ionicons name="flame" size={18} color={p.accent} />
             <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{stats.streak}</Txt>
-          </View>
+          </Pressable>
         ) : null}
       </View>
+      {flameOpen ? <StreakPopup stats={stats} onClose={() => setFlameOpen(false)} /> : null}
 
       {!main || !today ? (
         <>
@@ -399,8 +458,8 @@ export default function RoutineScreen() {
           {plans.map((r) => <PlanCard key={r.id} routine={r} />)}
           {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
+          <TourTarget id="routine.goal"><GoalCard stats={stats} closedText={goalClosed} /></TourTarget>
           <ZonesSection />
-          <TourTarget id="routine.goal"><GoalCard stats={stats} /></TourTarget>
           {main.plan ? null : <ChallengeBlock routine={main} />}
         </>
       )}

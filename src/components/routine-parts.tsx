@@ -3,17 +3,17 @@
 // card for the start page.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
-import { useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
-import { goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
+import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
 import { stepSeconds, useRoutines, type MemberRoutine, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
 import { TourTarget } from './tour';
-import { Card, Cover, Section, Txt } from './ui';
+import { Card, Cover, PictureFade, Section, Txt } from './ui';
 
 const WEEKDAY = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
 
@@ -28,23 +28,6 @@ export const routineSeconds = (routine: MemberRoutine) => routine.steps.reduce((
 
 const ON_PICTURE = '#FFFFFF';
 const ON_PICTURE_SOFT = 'rgba(255,255,255,0.85)';
-
-/** Darkens a picture towards the bottom, so that white text reads on any picture. */
-function PictureFade() {
-  const id = `fade${useId().replace(/\W/g, '')}`;
-  return (
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#000000" stopOpacity={0.22} />
-          <Stop offset="0.38" stopColor="#000000" stopOpacity={0.08} />
-          <Stop offset="1" stopColor="#000000" stopOpacity={0.86} />
-        </LinearGradient>
-      </Defs>
-      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
-    </Svg>
-  );
-}
 
 /** The top of a routine page: a large picture (the accent colour without one), a label above, what it is and its one action below. */
 export function HeroCard({ imageUrl, label, title, line, minHeight = 280, children }: {
@@ -167,11 +150,7 @@ export function ZonesSection() {
   const routines = useRoutines();
   const zones = q.data ?? [];
   if (zones.length === 0) return null;
-  const recommended = (routines.data ?? []).filter((r) => r.plan?.kind === 'recommended' && r.steps.length > 0);
-  const closed = recommended.length > 0 && !recommended.some((r) => planState(r) === 'over');
-  const goal = recommended[0]?.plan ? goalLabel(recommended[0].plan.days) : '';
-  const under = recommended.find((r) => planState(r) === 'running')?.challenge;
-  const daysLeft = under ? under.days - (under.dayNumber ?? 1) + 1 : 0;
+  const closedText = closedUntilRecommended(routines.data);
   const planOf = (zoneId: string) => routines.data?.find((r) => r.plan?.kind === 'zone' && r.plan.zoneId === zoneId);
   const line = (zoneId: string, exercises: number) => {
     const plan = planOf(zoneId);
@@ -182,15 +161,12 @@ export function ZonesSection() {
   };
   const stillClosed = (zoneId: string) => {
     const plan = planOf(zoneId);
-    return closed && !(plan && planState(plan) === 'running');
+    return closedText !== null && !(plan && planState(plan) === 'running');
   };
-  const closedText = under
-    ? `Noch ${plural(daysLeft, 'Tag', 'Tage')} in deiner empfohlenen Routine, dann wird das frei.`
-    : `Das wird frei, sobald du deine empfohlene Routine (${goal}) geschafft hast.`;
   return (
     <TourTarget id="routine.zones">
       <Section title="Gezielt üben">
-        <Txt muted>{closed ? closedText : 'Wähle einen Bereich und setz dir ein Ziel. Dein Plan sagt dir jeden Tag, was dran ist.'}</Txt>
+        <Txt muted>{closedText ?? 'Wähle einen Bereich und setz dir ein Ziel. Dein Plan sagt dir jeden Tag, was dran ist.'}</Txt>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
           {zones.map((z) => {
             const off = stillClosed(z.id);
@@ -204,7 +180,7 @@ export function ZonesSection() {
                 accessibilityLabel={off ? `${z.name}, noch gesperrt` : `${z.name}, ${line(z.id, z.exercises.length)}`}
                 onPress={() => {
                   if (off) {
-                    Alert.alert('Noch gesperrt', closedText);
+                    Alert.alert('Noch gesperrt', closedText ?? '');
                     return;
                   }
                   const plan = planOf(z.id);

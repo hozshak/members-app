@@ -30,6 +30,7 @@ const STEPS: Record<TourId, TourStep[]> = {
     { tab: 3, title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
   ],
   inhalte: [
+    { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Inhalte“. Ich führe dich einmal rum.' },
     { target: 'inhalte.search', title: 'Suche', text: 'Hier findest du jede Übung und jede Lektion.' },
     { target: 'inhalte.programmes', title: 'Deine Programme', text: 'Tippe auf ein Programm. Darin findest du alle Videos, schön der Reihe nach.' },
     { target: 'inhalte.downloads', title: 'Deine Downloads', text: 'Hier liegen deine PDFs, zum Öffnen und zum Herunterladen.' },
@@ -37,15 +38,17 @@ const STEPS: Record<TourId, TourStep[]> = {
     { target: 'inhalte.bookmarks', title: 'Merkliste', text: 'Was du dir in einer Lektion merkst, steht hier.' },
   ],
   routine: [
+    { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Routine“. Ich führe dich einmal rum.' },
     { target: 'routine.hero', title: 'Deine Routine heute', text: 'Hier startest du deine Übungen von heute. Die Videos zeigen dir, wie es geht.' },
     { target: 'routine.days', title: 'Deine letzten 14 Tage', text: 'Jeder Tag, an dem du deine Routine gemacht hast, bekommt einen Haken.' },
     { target: 'routine.reminder', title: 'Erinnerung', text: 'Die Erinnerung ist noch aus. Wir empfehlen sie dir, dann bleibst du leichter dran.' },
     { target: 'routine.check', title: 'Heute abhaken', text: 'Hake deine Übungen einzeln ab. Hast du dich vertippt, nimmst du den Haken einfach wieder raus.' },
     { target: 'routine.photos', title: 'Fortschrittsfotos', text: 'So siehst du, was sich verändert. Die Fotos bleiben nur auf deinem Handy.' },
+    { target: 'routine.goal', title: 'Mein Ziel', text: 'Hier setzt du dir später ein eigenes Ziel. Der Balken zeigt dir, wie nah du ihm schon bist.' },
     { target: 'routine.zones', title: 'Gezielt üben', text: 'Einzelne Bereiche wie Stirn, Kinn oder Hals. Das wird frei, sobald du deine empfohlene Routine geschafft hast.' },
-    { target: 'routine.goal', title: 'Mein Ziel', text: 'Setz dir ein eigenes Ziel. Der Balken zeigt dir, wie nah du ihm schon bist.' },
   ],
   profil: [
+    { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Profil“. Ich führe dich einmal rum.' },
     { target: 'profil.frame', title: 'Dein Rahmen', text: 'Mit jedem Übungstag wird der Rahmen um dein Foto schöner. Das Ausrufezeichen zeigt dir alle Stufen.' },
     { target: 'profil.reminders', title: 'Erinnerungen', text: 'Hier stellst du ein, wann dich die App an deine Routine erinnert.' },
     { target: 'profil.icon', title: 'App-Icon', text: 'Such dir aus, wie die App auf deinem Home-Bildschirm aussieht.' },
@@ -90,7 +93,8 @@ async function beginIfNew(tour: TourId): Promise<void> {
   const state = await loadSeen();
   if (active || state[tour]) return;
   const steps = STEPS[tour].filter((s) => !s.target || targets.has(s.target));
-  if (steps.length === 0) return;
+  // only the welcome left: there is nothing to show yet
+  if (!steps.some((s) => s.target || s.tab !== undefined)) return;
   active = { tour, steps, index: 0 };
   emit();
 }

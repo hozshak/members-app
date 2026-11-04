@@ -41,6 +41,22 @@ export function mainRoutine(list: readonly MemberRoutine[] | undefined): MemberR
     ?? null;
 }
 
+/**
+ * "Gezielt üben" and "Mein Ziel" open once a recommended plan is finished (owner 04.11.2026): what to tell the member until then; null when they
+ * are open, also when there is no recommended plan.
+ */
+export function closedUntilRecommended(list: readonly MemberRoutine[] | undefined): string | null {
+  const recommended = (list ?? []).filter((r) => r.plan?.kind === 'recommended' && r.steps.length > 0);
+  if (recommended.length === 0 || recommended.some((r) => planState(r) === 'over')) return null;
+  const under = recommended.find((r) => planState(r) === 'running')?.challenge;
+  if (under) {
+    const left = under.days - (under.dayNumber ?? 1) + 1;
+    return `Noch ${left === 1 ? '1 Tag' : `${left} Tage`} in deiner empfohlenen Routine, dann wird das frei.`;
+  }
+  const plan = recommended[0]?.plan;
+  return `Das wird frei, sobald du deine empfohlene Routine (${plan ? goalLabel(plan.days) : ''}) geschafft hast.`;
+}
+
 const dayNumber = (day: string) => Math.round(Date.parse(`${day}T12:00:00Z`) / 86_400_000);
 
 /** Streak and calendar over all routines: changing from the recommended plan to a zone does not lose the series. */
