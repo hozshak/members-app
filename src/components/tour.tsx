@@ -28,10 +28,13 @@ export function TourTarget({ id, style, children }: { id: string; style?: StyleP
   return <View ref={ref} collapsable={false} style={style}>{children}</View>;
 }
 
-/** The items of the tab bar share its width; from iOS 26 on the bar floats as a capsule with a margin. */
+/**
+ * The items of the tab bar share its width. From iOS 26 on the bar floats as a capsule: measured on screenshots of an iPhone 17 Pro, its items
+ * start 31 points from the edge and their middle is 52 points above the bottom. (Platform.Version is a text like "26.6.2" there.)
+ */
 function tabHole(i: number, { W, H, bottom }: Frame): Hole {
-  const floating = Platform.OS === 'ios' && Number(Platform.Version) >= 26;
-  const margin = floating ? 21 : 0;
+  const floating = Platform.OS === 'ios' && parseInt(String(Platform.Version), 10) >= 26;
+  const margin = floating ? 31 : 0;
   const cx = margin + ((W - 2 * margin) * (i + 0.5)) / TAB_COUNT;
   const cy = floating ? H - 52 : H - bottom - (Platform.OS === 'android' ? 40 : 25);
   return { x: cx - TAB_CIRCLE / 2, y: cy - TAB_CIRCLE / 2, w: TAB_CIRCLE, h: TAB_CIRCLE, r: TAB_CIRCLE / 2 };
