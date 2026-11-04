@@ -42,6 +42,19 @@ export function mainRoutine(list: readonly MemberRoutine[] | undefined): MemberR
 }
 
 /**
+ * There is one recommended plan per programme (owner 04.11.2026). Who has several does them one after the other, in the order of the list: the
+ * plan this one still waits for, null when it may start.
+ */
+export function waitingFor(list: readonly MemberRoutine[] | undefined, routine: MemberRoutine): MemberRoutine | null {
+  if (routine.plan?.kind !== 'recommended' || planState(routine) !== 'open') return null;
+  for (const r of list ?? []) {
+    if (r.id === routine.id) return null;
+    if (r.plan?.kind === 'recommended' && r.steps.length > 0 && planState(r) !== 'over') return r;
+  }
+  return null;
+}
+
+/**
  * "Gezielt üben" and "Mein Ziel" open once a recommended plan is finished (owner 04.11.2026): what to tell the member until then; null when they
  * are open, also when there is no recommended plan.
  */

@@ -18,7 +18,7 @@ import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
-import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
+import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, waitingFor, withSwaps } from '@/lib/plans';
 import {
   allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
   type MemberRoutine, type ProgressPhoto, type RoutineStats,
@@ -262,11 +262,25 @@ function ChallengeBlock({ routine }: { routine: MemberRoutine }) {
   );
 }
 
-/** Another plan: where the member stands, one tap to its page. */
-function PlanCard({ routine }: { routine: MemberRoutine }) {
+/** Another plan: where the member stands, one tap to its page. A recommended plan that has to wait for the one before it stays closed until then. */
+function PlanCard({ routine, waiting }: { routine: MemberRoutine; waiting: MemberRoutine | null }) {
   const p = usePalette();
   const ch = routine.challenge;
   const state = planState(routine);
+  if (waiting) {
+    return (
+      <Card accessibilityLabel={`Danach: ${routine.title}, startet nach ${waiting.title}`} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, backgroundColor: p.surfaceAlt, borderColor: 'transparent' }}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.surface, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="lock-closed" size={20} color={p.textMuted} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt variant="caption" muted>Danach</Txt>
+          <Txt variant="heading" color={p.textMuted}>{routine.title}</Txt>
+          <Txt variant="small" muted>Startet, sobald du „{waiting.title}“ geschafft hast.</Txt>
+        </View>
+      </Card>
+    );
+  }
   return (
     <Card onPress={() => openPlan(routine.id)} accessibilityLabel={`${planLabel(routine)}: ${routine.title}`} style={{ padding: space.l, gap: space.s }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
@@ -455,7 +469,7 @@ export default function RoutineScreen() {
           <TodayHero routine={today} />
           {showWay ? <WayCard routine={main} days={stats.days} /> : null}
           <ReminderHint routine={main} />
-          {plans.map((r) => <PlanCard key={r.id} routine={r} />)}
+          {plans.map((r) => <PlanCard key={r.id} routine={r} waiting={waitingFor(q.data, r)} />)}
           {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
           <TourTarget id="routine.goal"><GoalCard stats={stats} closedText={goalClosed} /></TourTarget>
