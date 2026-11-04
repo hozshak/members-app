@@ -1,12 +1,12 @@
-// Doing the routine. First a START screen: what is coming, mirror, video and sound on or off, "Los geht's" — then 3-2-1 and one exercise after the other with a countdown, pause / skip / back, a soft vibration
-// and a small sound at every change (no voice: owner 02.11.2026), the screen stays on. What comes next is written below.
-// With mirror and video on both stand side by side in the same size (a landscape video above the mirror) and the countdown
+// Doing the routine. First a START screen: what is coming, the mirror on or off, "Los geht's" — then 3-2-1 and one exercise after the other with a countdown, pause / skip / back and a soft vibration
+// at every change (no voice, no extra sounds; the video always shows and has its sound: owner 04.11.2026), the screen stays on. What comes next is written below.
+// With the mirror on, mirror and video stand side by side in the same size (a landscape video above the mirror) and the countdown
 // sits on the seam; each picture can be enlarged (the other one becomes a small picture in the corner) and made small
 // again. An exercise with a video lasts as long as the video, which pauses with the countdown; it starts at once. A short video lies
 // on the phone once it has been loaded (lib/exercise-videos.ts) and then also lies ready behind the running one; every other one
 // streams like a lesson, and while one streams nothing else loads. While a video waits for data the countdown waits too, at most
-// HOLD_MAX_MS, so a bad connection never blocks the routine. After the last exercise the day is marked done, the streak and a new
-// frame of the profile are shown, and the success can be shared.
+// HOLD_MAX_MS, so a bad connection never blocks the routine. After the last exercise the day is marked done and a popup shows the streak
+// and a new frame of the profile; the success can be shared from there.
 // `practice` (a session of a zone, "Gezielt üben"): the same run with the minutes instead of the length; it ticks nothing and
 // does not count for the streak.
 import { Ionicons } from '@expo/vector-icons';
@@ -15,13 +15,14 @@ import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FrameRing } from '@/components/frame-ring';
 import { LinkedText } from '@/components/linked-text';
 import { LessonPlayer } from '@/components/player';
-import { MinutesPicker, ProgressRing, routineSeconds } from '@/components/routine-parts';
+import { ExerciseThumb, MinutesPicker, ProgressRing, routineSeconds } from '@/components/routine-parts';
 import { useShareCard } from '@/components/share-card';
-import { Button, Cover, Screen, Txt } from '@/components/ui';
+import { Button, Screen, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { useExerciseVideos } from '@/lib/exercise-videos';
 import { frameOf } from '@/lib/frame';
@@ -32,7 +33,6 @@ import {
 } from '@/lib/routine';
 import { overallStats } from '@/lib/plans';
 import { useApi } from '@/lib/session';
-import { playTone, prepareTones } from '@/lib/sounds';
 import { radius, space, usePalette } from '@/lib/theme';
 
 /** Shape of an exercise video until it is loaded (most are filmed upright on a phone). */
@@ -158,14 +158,15 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const [practiceDone, setPracticeDone] = useState(false);
   // end time of the running countdown (set when it starts or resumes)
   const endsAt = useRef(0);
-  const lastTick = useRef('');
   const step = routine.steps[index];
   const next = routine.steps[index + 1];
-  // (not under the start screen: the camera only runs when it is needed)
-  const mirror = prefs.mirror && !!camPerm?.granted && Platform.OS !== 'web' && phase !== 'ready';
-  const video = !!(step?.videoId && step.videoAvailable) && prefs.video;
+  // the run is over: the popup shows, also while the day is being saved or could not be saved
+  const over = !!finished || practiceDone || checkIn.isPending || checkIn.isError;
+  // (not under the start screen and the popup: the camera only runs when it is needed)
+  const mirror = prefs.mirror && !!camPerm?.granted && Platform.OS !== 'web' && phase !== 'ready' && !over;
+  const video = !!(step?.videoId && step.videoAvailable);
   const stepVideo = video ? (step?.videoId ?? null) : null;
-  const videoIds = prefs.video ? routine.steps.flatMap((s) => (s.videoId && s.videoAvailable ? [s.videoId] : [])) : [];
+  const videoIds = routine.steps.flatMap((s) => (s.videoId && s.videoAvailable ? [s.videoId] : []));
   // a video that streams needs the connection for itself: the loading rests
   const streaming = useRef(false);
   const videos = useExerciseVideos(api, videoIds, stepVideo, streaming);
@@ -181,10 +182,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const onWaiting = useCallback((w: boolean) => {
     setWaiting(w);
     if (!w) setHoldOver(false);
-  }, []);
-
-  useEffect(() => {
-    prepareTones();
   }, []);
 
   useEffect(() => {
@@ -209,7 +206,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     setHoldOver(false);
     setWaiting(false);
     buzz('step');
-    playTone('step', prefs.sound);
   };
 
   const save = () => checkIn.mutate(true, {
@@ -221,7 +217,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const finish = () => {
     setRunning(false);
     buzz('done');
-    playTone('done', prefs.sound);
     if (practice) {
       setPracticeDone(true);
       return;
@@ -237,7 +232,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     setRemaining(list[0] ?? 0);
     setCount(3);
     setPhase('count');
-    playTone('tick', prefs.sound);
   };
 
   // 3-2-1: the first video is already loading meanwhile
@@ -245,20 +239,15 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     if (phase !== 'count') return;
     const t = setInterval(() => {
       setCount((c) => {
-        if (c > 1) {
-          playTone('tick', prefs.sound);
-          return c - 1;
-        }
+        if (c > 1) return c - 1;
         clearInterval(t);
         setPhase('run');
         setRunning(true);
         buzz('step');
-        playTone('step', prefs.sound);
         return c;
       });
     }, 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per countdown
   }, [phase]);
 
   // the countdown: compares with the end time (keeps exact when the phone is busy), next exercise at zero
@@ -268,11 +257,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     const t = setInterval(() => {
       const left = Math.max(0, Math.ceil((endsAt.current - Date.now()) / 1000));
       setRemaining(left);
-      const mark = `${index}:${left}`;
-      if (left > 0 && left <= 3 && lastTick.current !== mark) {
-        lastTick.current = mark;
-        playTone('tick', prefs.sound);
-      }
       if (left === 0) {
         clearInterval(t);
         if (index + 1 < routine.steps.length) goTo(index + 1);
@@ -294,13 +278,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const chips = (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
       <OptionChip icon={prefs.mirror ? 'scan' : 'scan-outline'} label="Spiegel" on={prefs.mirror} onPress={() => void toggleMirror()} />
-      {routine.steps.some((x) => x.videoId && x.videoAvailable) ? (
-        <>
-          <OptionChip icon={prefs.video ? 'videocam' : 'videocam-outline'} label="Video" on={prefs.video} onPress={() => update({ video: !prefs.video })} />
-          <OptionChip icon={prefs.videoMuted ? 'volume-mute' : 'volume-high'} label="Video-Ton" on={!prefs.videoMuted} onPress={() => update({ videoMuted: !prefs.videoMuted })} />
-        </>
-      ) : null}
-      <OptionChip icon={prefs.sound ? 'musical-note' : 'notifications-off-outline'} label="Signaltöne" on={prefs.sound} onPress={() => update({ sound: !prefs.sound })} />
     </View>
   );
 
@@ -312,7 +289,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
             <Ionicons name="close" size={28} color={p.text} />
           </Pressable>
           <View style={{ gap: space.xs }}>
-            <Txt variant="caption" color={p.accent}>{practice ? 'Gezielt üben' : routine.stats.doneToday ? 'Heute schon erledigt – gern noch einmal' : 'Deine Routine heute'}</Txt>
+            <Txt variant="caption" color={p.accent}>{practice ? 'Gezielt üben' : 'Deine Routine heute'}</Txt>
             <Txt variant="display">{routine.title}</Txt>
             <Txt muted>{plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(practice ? routine.totalSec : routineSeconds(routine))}</Txt>
             {routine.description ? <LinkedText text={routine.description} muted style={{ marginTop: space.xs }} /> : null}
@@ -338,15 +315,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
             <View style={{ borderRadius: radius.l, backgroundColor: p.surface, overflow: 'hidden' }}>
               {routine.steps.map((s, i) => (
                 <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth, borderTopColor: p.line }}>
-                  {s.videoThumbnailUrl ? (
-                    <Cover url={s.videoThumbnailUrl} title={s.title} aspect={1} style={{ width: 48 }} />
-                  ) : (
-                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-                      <Txt variant="small" color={p.accent} style={{ fontWeight: '700' }}>{i + 1}</Txt>
-                    </View>
-                  )}
+                  <ExerciseThumb step={s} />
                   <Txt style={{ flex: 1 }} numberOfLines={2}>{s.title}</Txt>
-                  {s.videoId && s.videoAvailable ? <Ionicons name="videocam-outline" size={16} color={p.textMuted} accessibilityLabel="mit Video" /> : null}
                   <Txt variant="small" muted style={{ fontVariant: ['tabular-nums'] }}>{clock(stepSeconds(s))}</Txt>
                 </View>
               ))}
@@ -359,53 +329,53 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
       </View>
   ) : null;
 
-  // ---------- done ----------
-  if (practiceDone) {
-    return (
-      <Screen contentStyle={{ paddingTop: insets.top + space.xxl * 2, alignItems: 'center', gap: space.l }}>
-        <View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="checkmark" size={72} color={p.accent} />
-        </View>
-        <Txt variant="display" style={{ textAlign: 'center' }}>Geschafft!</Txt>
-        <Txt variant="title" style={{ textAlign: 'center' }}>{minutes(routine.totalSec)} {routine.title}</Txt>
-        <Txt muted style={{ textAlign: 'center' }}>Schön, dass du dir die Zeit genommen hast.</Txt>
-        <Button label="Fertig" onPress={() => router.back()} style={{ alignSelf: 'stretch' }} />
-      </Screen>
-    );
-  }
-  if (finished || checkIn.isPending || checkIn.isError) {
-    return (
-      <Screen contentStyle={{ paddingTop: insets.top + space.xxl * 2, alignItems: 'center', gap: space.l }}>
-        {card.element}
-        <View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="flame" size={64} color={p.accent} />
-        </View>
-        <Txt variant="display" style={{ textAlign: 'center' }}>Geschafft!</Txt>
-        {series ? (
-          <Txt variant="title" style={{ textAlign: 'center' }}>{series.streak === 1 ? 'Tag 1 deiner Serie' : `${series.streak} Tage in Folge`}</Txt>
-        ) : checkIn.isError ? (
-          <View style={{ gap: space.m, alignItems: 'center' }}>
-            <Txt color={p.danger} style={{ textAlign: 'center' }}>{errorText(checkIn.error)}</Txt>
-            <Button label="Noch einmal speichern" onPress={save} />
+  // ---------- done: a popup over the last exercise ----------
+  const donePopup = over ? (
+    <Modal transparent visible animationType="fade" onRequestClose={() => router.back()} statusBarTranslucent>
+      <View style={{ flex: 1, justifyContent: 'center', padding: space.l, backgroundColor: 'rgba(0,0,0,0.6)' }}>
+        <View accessibilityViewIsModal accessibilityLiveRegion="polite" style={{ alignItems: 'center', gap: space.m, padding: space.xl, borderRadius: radius.xl, backgroundColor: p.surface }}>
+          <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={practice ? 'checkmark' : 'flame'} size={56} color={p.accent} />
           </View>
-        ) : (
-          <Txt muted>Wird gespeichert …</Txt>
-        )}
-        {newFrame ? (
-          <View style={{ alignSelf: 'stretch', gap: space.xs, padding: space.l, borderRadius: radius.l, backgroundColor: p.accentSoft }}>
-            <Txt variant="caption" color={p.accent}>Neuer Rahmen</Txt>
-            <Txt variant="heading">{newFrame.name}: Sieh ihn dir in deinem Profil an.</Txt>
-          </View>
-        ) : null}
-        <Txt muted style={{ textAlign: 'center' }}>{routine.title} ist für heute erledigt. Bis morgen!</Txt>
-        {finished && routine.plan && routine.challenge?.dayNumber === routine.challenge?.days ? (
-          <Button label="Nachher-Foto machen" onPress={() => router.replace({ pathname: '/routine/kamera', params: { plan: routine.id, slot: 'end' } } as unknown as Href)} style={{ alignSelf: 'stretch' }} />
-        ) : null}
-        {finished && Platform.OS !== 'web' ? <Button label="Erfolg teilen" kind="secondary" onPress={() => void card.share()} style={{ alignSelf: 'stretch' }} /> : null}
-        <Button label="Fertig" onPress={() => router.back()} style={{ alignSelf: 'stretch' }} />
-      </Screen>
-    );
-  }
+          <Txt variant="display" style={{ textAlign: 'center' }}>Geschafft!</Txt>
+          {practice ? (
+            <>
+              <Txt variant="title" style={{ textAlign: 'center' }}>{minutes(routine.totalSec)} {routine.title}</Txt>
+              <Txt muted style={{ textAlign: 'center' }}>Schön, dass du dir die Zeit genommen hast.</Txt>
+            </>
+          ) : (
+            <>
+              {series ? (
+                <Txt variant="title" style={{ textAlign: 'center' }}>{series.streak === 1 ? 'Tag 1 deiner Serie' : `${series.streak} Tage in Folge`}</Txt>
+              ) : checkIn.isError ? (
+                <View style={{ gap: space.m, alignItems: 'center' }}>
+                  <Txt color={p.danger} style={{ textAlign: 'center' }}>{errorText(checkIn.error)}</Txt>
+                  <Button label="Noch einmal speichern" onPress={save} />
+                </View>
+              ) : (
+                <Txt muted>Wird gespeichert …</Txt>
+              )}
+              {newFrame ? (
+                <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, borderRadius: radius.l, backgroundColor: p.accentSoft }}>
+                  <FrameRing frame={newFrame} size={56}><Ionicons name="person" size={22} color={p.accent} /></FrameRing>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Txt variant="caption" color={p.accent}>Neuer Rahmen</Txt>
+                    <Txt variant="heading">{newFrame.name}: Sieh ihn dir in deinem Profil an.</Txt>
+                  </View>
+                </View>
+              ) : null}
+              <Txt muted style={{ textAlign: 'center' }}>{routine.title} ist für heute erledigt. Bis morgen!</Txt>
+            </>
+          )}
+          {finished && routine.plan && routine.challenge?.dayNumber === routine.challenge?.days ? (
+            <Button label="Nachher-Foto machen" onPress={() => router.replace({ pathname: '/routine/kamera', params: { plan: routine.id, slot: 'end' } } as unknown as Href)} style={{ alignSelf: 'stretch' }} />
+          ) : null}
+          {finished && Platform.OS !== 'web' ? <Button label="Erfolg teilen" kind="secondary" onPress={() => void card.share()} style={{ alignSelf: 'stretch' }} /> : null}
+          <Button label="Fertig" onPress={() => router.back()} style={{ alignSelf: 'stretch' }} />
+        </View>
+      </View>
+    </Modal>
+  ) : null;
   if (!step) return startScreen;
 
   // ---------- one exercise ----------
@@ -457,8 +427,6 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
                   playing={active && phase === 'run' && running}
                   onAspect={active ? setVideoAspect : undefined}
                   onWaiting={active ? onWaiting : undefined}
-                  muted={prefs.videoMuted}
-                  onToggleMuted={() => update({ videoMuted: !prefs.videoMuted })}
                   posterUrl={s.videoThumbnailUrl}
                   file={file}
                   onFileFailed={() => videos.drop(s.videoId ?? '')}
@@ -486,6 +454,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      {card.element}
       <View
         style={{ flex: 1 }}
         accessibilityElementsHidden={phase === 'ready'}
@@ -541,6 +510,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           <Txt muted>Mach dich bereit</Txt>
         </View>
       ) : null}
+
+      {donePopup}
     </View>
   );
 }

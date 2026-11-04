@@ -13,6 +13,7 @@ import { useRoutines, type RoutineStats } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import type { CategoryCard, MemberProduct } from '@/lib/types';
 import { TwoWeeks } from './routine-parts';
+import { TourTarget } from './tour';
 import { Card, ProgressBar, Section, Txt } from './ui';
 
 export function DailyQuote() {
@@ -117,14 +118,16 @@ export function ProgressOverview({ products, others }: { products: readonly Memb
   const hasRoutine = !!routine && routine.steps.length > 0;
   if (counted.length === 0 && rest.total === 0 && !hasRoutine) return null;
   return (
-    <Section title="Dein Fortschritt">
-      <View style={{ gap: space.m }}>
-        {counted.map((product) => <ProductProgress key={product.id} product={product} />)}
-        {rest.total > 0 ? (
-          <ProgressRow title="Weitere Inhalte" done={rest.done} total={rest.total} line={null} onPress={() => router.navigate('/inhalte' as Href)} />
-        ) : null}
-        {hasRoutine ? <RoutineProgress stats={overallStats(routines.data)} /> : null}
-      </View>
-    </Section>
+    <TourTarget id="start.progress">
+      <Section title="Dein Fortschritt">
+        <View style={{ gap: space.m }}>
+          {counted.map((product) => <ProductProgress key={product.id} product={product} />)}
+          {rest.total > 0 ? (
+            <ProgressRow title="Weitere Inhalte" done={rest.done} total={rest.total} line={null} onPress={() => router.navigate('/inhalte' as Href)} />
+          ) : null}
+          {hasRoutine ? <RoutineProgress stats={overallStats(routines.data)} /> : null}
+        </View>
+      </Section>
+    </TourTarget>
   );
 }

@@ -107,15 +107,15 @@ export interface RoutinePrefs {
   photoReminder: boolean; photoWeekday: number; photoHour: number; photoMinute: number;
   /** The progress photos need Face ID / the phone's code. */
   photoLock: boolean;
-  /** In the routine: front camera as a mirror, small sounds. */
-  mirror: boolean; sound: boolean;
-  /** The exercise video next to the mirror (on by default), and whether it plays without sound. */
-  video: boolean; videoMuted: boolean;
+  /** In the routine: front camera as a mirror. */
+  mirror: boolean;
+  /** "Nicht jetzt" on the hint that recommends the reminder (it is off until the member allows notifications). */
+  reminderHintClosed: boolean;
 }
 const PREFS_KEY = 'members.routine';
 export const DEFAULT_PREFS: RoutinePrefs = {
   reminder: false, hour: 8, minute: 0, photoReminder: false, photoWeekday: 1, photoHour: 10, photoMinute: 0,
-  photoLock: false, mirror: false, sound: true, video: true, videoMuted: false,
+  photoLock: false, mirror: false, reminderHintClosed: false,
 };
 
 /** Weekdays in the order of the week, numbered as the reminders need them (1 = Sunday). */

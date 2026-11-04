@@ -19,6 +19,7 @@ export default function ProfileStack() {
       <Stack.Screen name="daten" options={{ title: 'Persönliche Daten' }} />
       <Stack.Screen name="passwort" options={{ title: 'Passwort ändern' }} />
       <Stack.Screen name="erinnerungen" options={{ title: 'Erinnerungen' }} />
+      <Stack.Screen name="app-icon" options={{ title: 'App-Icon' }} />
       <Stack.Screen name="benachrichtigungen" options={{ title: 'Benachrichtigungen' }} />
       <Stack.Screen name="geraete" options={{ title: 'Geräte' }} />
       <Stack.Screen name="kaeufe" options={{ title: 'Meine Käufe' }} />

@@ -1,17 +1,18 @@
-// Small pieces shared by the routine screens: the progress ring, the minutes of a
-// zone session, the last 14 days, "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a card for the start page.
+// Small pieces shared by the routine screens: the progress ring, the minutes of a zone session, the picture of an exercise, the last 14 days,
+// "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a card for the start page.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
-import { stepSeconds, useRoutines, type MemberRoutine, type RoutineChallenge } from '@/lib/routine';
+import { stepSeconds, useRoutines, type MemberRoutine, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
-import { Card, Section, Txt } from './ui';
+import { TourTarget } from './tour';
+import { Card, Cover, Section, Txt } from './ui';
 
 const WEEKDAY = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
 
@@ -67,13 +68,30 @@ export function MinutesPicker({ value, options, onChange }: { value: number; opt
   );
 }
 
-/** "Gezielt üben": one tile per zone with videos the member may open; nothing when there is none. */
+/** The picture of an exercise: the thumbnail of its video, or a small figure without one. */
+export function ExerciseThumb({ step, size = 48 }: { step: Pick<RoutineStep, 'title' | 'videoThumbnailUrl'>; size?: number }) {
+  const p = usePalette();
+  if (step.videoThumbnailUrl) return <Cover url={step.videoThumbnailUrl} title={step.title} aspect={1} style={{ width: size }} />;
+  return (
+    <View style={{ width: size, height: size, borderRadius: radius.m, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+      <Ionicons name="body-outline" size={size / 2} color={p.accent} />
+    </View>
+  );
+}
+
+/**
+ * "Gezielt üben": one tile per zone with videos the member may open; nothing when there is none. Grey and closed until a recommended plan is
+ * finished (owner 04.11.2026); without a recommended plan, or for a zone plan already under way, it stays open.
+ */
 export function ZonesSection() {
   const p = usePalette();
   const q = useZones();
   const routines = useRoutines();
   const zones = q.data ?? [];
   if (zones.length === 0) return null;
+  const recommended = (routines.data ?? []).filter((r) => r.plan?.kind === 'recommended' && r.steps.length > 0);
+  const closed = recommended.length > 0 && !recommended.some((r) => planState(r) === 'over');
+  const goal = recommended[0]?.plan ? goalLabel(recommended[0].plan.days) : '';
   const planOf = (zoneId: string) => routines.data?.find((r) => r.plan?.kind === 'zone' && r.plan.zoneId === zoneId);
   const line = (zoneId: string, exercises: number) => {
     const plan = planOf(zoneId);
@@ -82,31 +100,49 @@ export function ZonesSection() {
     if (state === 'running') return `Tag ${plan.challenge?.dayNumber} von ${plan.challenge?.days}`;
     return state === 'over' ? 'Plan beendet' : `Plan · ${goalLabel(plan.plan.days)}`;
   };
+  const stillClosed = (zoneId: string) => {
+    const plan = planOf(zoneId);
+    return closed && !(plan && planState(plan) === 'running');
+  };
+  const closedText = `Das wird frei, sobald du deine empfohlene Routine (${goal}) geschafft hast.`;
   return (
-    <Section title="Gezielt üben">
-      <Txt muted>Wähle einen Bereich und setz dir ein Ziel. Dein Plan sagt dir jeden Tag, was dran ist.</Txt>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
-        {zones.map((z) => (
-          <Pressable
-            key={z.id}
-            accessibilityRole="button"
-            accessibilityLabel={`${z.name}, ${line(z.id, z.exercises.length)}`}
-            onPress={() => {
-              const plan = planOf(z.id);
-              if (plan) openPlan(plan.id);
-              else router.push({ pathname: '/routine/zone', params: { id: z.id } } as unknown as Href);
-            }}
-            style={({ pressed }) => ({
-              flexGrow: 1, flexBasis: '45%', minHeight: 72, justifyContent: 'center', gap: 2, padding: space.m, borderRadius: radius.l, borderWidth: 1,
-              borderColor: p.line, backgroundColor: p.surface, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }],
-            })}
-          >
-            <Txt variant="heading" numberOfLines={1}>{z.name}</Txt>
-            <Txt variant="small" muted>{line(z.id, z.exercises.length)}</Txt>
-          </Pressable>
-        ))}
-      </View>
-    </Section>
+    <TourTarget id="routine.zones">
+      <Section title="Gezielt üben">
+        <Txt muted>{closed ? closedText : 'Wähle einen Bereich und setz dir ein Ziel. Dein Plan sagt dir jeden Tag, was dran ist.'}</Txt>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
+          {zones.map((z) => {
+            const off = stillClosed(z.id);
+            return (
+              <Pressable
+                key={z.id}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: off }}
+                accessibilityLabel={off ? `${z.name}, noch gesperrt` : `${z.name}, ${line(z.id, z.exercises.length)}`}
+                onPress={() => {
+                  if (off) {
+                    Alert.alert('Noch gesperrt', closedText);
+                    return;
+                  }
+                  const plan = planOf(z.id);
+                  if (plan) openPlan(plan.id);
+                  else router.push({ pathname: '/routine/zone', params: { id: z.id } } as unknown as Href);
+                }}
+                style={({ pressed }) => ({
+                  flexGrow: 1, flexBasis: '45%', minHeight: 72, justifyContent: 'center', gap: 2, padding: space.m, borderRadius: radius.l, borderWidth: 1,
+                  borderColor: p.line, backgroundColor: off ? p.surfaceAlt : p.surface, opacity: off ? 0.55 : pressed ? 0.85 : 1, transform: [{ scale: pressed && !off ? 0.98 : 1 }],
+                })}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+                  <Txt variant="heading" numberOfLines={1} style={{ flexShrink: 1 }}>{z.name}</Txt>
+                  {off ? <Ionicons name="lock-closed" size={14} color={p.textMuted} /> : null}
+                </View>
+                <Txt variant="small" muted>{off ? 'Noch gesperrt' : line(z.id, z.exercises.length)}</Txt>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Section>
+    </TourTarget>
   );
 }
 
@@ -172,27 +208,38 @@ export function RoutineTodayCard() {
   const done = routine.stats.doneToday;
   const streak = overallStats(q.data).streak;
   const state = routine.plan ? planState(routine) : null;
+  const go = () => {
+    if (done) router.navigate('/routine' as Href);
+    else if (state === 'running' || !routine.plan) openRoutine(routine.id);
+    else openPlan(routine.id);
+  };
   return (
-    <Card
-      onPress={() => (state === 'running' || !routine.plan ? openRoutine(routine.id) : openPlan(routine.id))}
-      accessibilityLabel={`${routine.title}${done ? ', heute erledigt' : ', starten'}`}
-      style={{ padding: space.l, flexDirection: 'row', alignItems: 'center', gap: space.m, backgroundColor: p.accentSoft, borderColor: 'transparent' }}
-    >
-      <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: done ? p.accent : p.surface, alignItems: 'center', justifyContent: 'center' }}>
-        <Ionicons name={done ? 'checkmark' : 'flame'} size={done ? 30 : 26} color={done ? p.onAccent : p.accent} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : routine.plan ? planLabel(routine) : 'Deine Routine heute'}</Txt>
-        <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
-        <Txt variant="small" muted>
-          {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
-          {plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine))}
-          {streak > 0 ? ` · ${plural(streak, 'Tag', 'Tage')} in Folge` : ''}
-        </Txt>
-      </View>
-      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: done ? p.surface : p.accent, alignItems: 'center', justifyContent: 'center' }}>
-        <Ionicons name={done ? 'refresh' : 'play'} size={22} color={done ? p.textMuted : p.onAccent} />
-      </View>
-    </Card>
+    <TourTarget id="start.routine">
+      <Card
+        onPress={go}
+        accessibilityLabel={`${routine.title}${done ? ', heute erledigt' : ', starten'}`}
+        style={{ padding: space.l, flexDirection: 'row', alignItems: 'center', gap: space.m, backgroundColor: p.accentSoft, borderColor: 'transparent' }}
+      >
+        <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: done ? p.accent : p.surface, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={done ? 'checkmark' : 'flame'} size={done ? 30 : 26} color={done ? p.onAccent : p.accent} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : routine.plan ? planLabel(routine) : 'Deine Routine heute'}</Txt>
+          <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
+          <Txt variant="small" muted>
+            {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
+            {plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine))}
+            {streak > 0 ? ` · ${plural(streak, 'Tag', 'Tage')} in Folge` : ''}
+          </Txt>
+        </View>
+        {done ? (
+          <Ionicons name="chevron-forward" size={22} color={p.textMuted} />
+        ) : (
+          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accent, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="play" size={22} color={p.onAccent} />
+          </View>
+        )}
+      </Card>
+    </TourTarget>
   );
 }

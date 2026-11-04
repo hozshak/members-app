@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorText } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { radius, space, type, usePalette } from '@/lib/theme';
+import { noteTourScroll, useTourScroll, type TourId } from '@/lib/tour';
 
 type Variant = keyof typeof type;
 
@@ -22,14 +23,18 @@ export function Txt({ variant = 'body', muted, color, style, children, numberOfL
   );
 }
 
-/** Scrollable page on the app background; pull to refresh when `onRefresh` is given. */
-export function Screen({ children, onRefresh, refreshing = false, padded = true, contentStyle }: {
-  children: ReactNode; onRefresh?: () => void; refreshing?: boolean; padded?: boolean; contentStyle?: StyleProp<ViewStyle>;
+/** Scrollable page on the app background; pull to refresh when `onRefresh` is given. `tour`: the assistant of this tab scrolls it (lib/tour.ts). */
+export function Screen({ children, onRefresh, refreshing = false, padded = true, contentStyle, tour }: {
+  children: ReactNode; onRefresh?: () => void; refreshing?: boolean; padded?: boolean; contentStyle?: StyleProp<ViewStyle>; tour?: TourId;
 }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
+  const scrollRef = useTourScroll(tour);
   return (
     <ScrollView
+      ref={scrollRef}
+      onScroll={tour ? (e) => noteTourScroll(tour, e) : undefined}
+      scrollEventThrottle={tour ? 32 : undefined}
       style={{ flex: 1, backgroundColor: p.bg }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={[padded && { padding: space.l }, { paddingBottom: insets.bottom + space.xxl, gap: space.l }, contentStyle]}

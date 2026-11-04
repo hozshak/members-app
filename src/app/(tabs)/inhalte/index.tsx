@@ -8,11 +8,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CategoryTile, ContinueTile, kindLabel, LessonLink, ProductTile } from '@/components/content';
 import { DownloadRow } from '@/components/download';
+import { TourTarget } from '@/components/tour';
 import { ErrorView, Loading, Screen, Section, Txt } from '@/components/ui';
 import { plural, uniqueById } from '@/lib/format';
 import { useBookmarks } from '@/lib/bookmarks';
 import { searchable, useHome, useLibrary, useSearchIndex } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
+import { useTourOnFocus } from '@/lib/tour';
 
 function SearchResults({ query }: { query: string }) {
   const index = useSearchIndex(true);
@@ -41,6 +43,7 @@ export default function LibraryScreen() {
   const bookmarks = useBookmarks();
   const [query, setQuery] = useState('');
   const searching = query.trim().length >= 2;
+  useTourOnFocus('inhalte', !q.isPending);
 
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorView error={q.error} onRetry={() => void q.refetch()} />;
@@ -51,9 +54,10 @@ export default function LibraryScreen() {
   const downloads = uniqueById(lib.products.flatMap((x) => x.downloads));
 
   return (
-    <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
+    <Screen tour="inhalte" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <Txt variant="display">Inhalte</Txt>
 
+      <TourTarget id="inhalte.search">
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, minHeight: 48, paddingHorizontal: space.m, borderRadius: radius.l, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line }}>
         <Ionicons name="search" size={20} color={p.textMuted} />
         <TextInput
@@ -72,23 +76,28 @@ export default function LibraryScreen() {
           </Pressable>
         ) : null}
       </View>
+      </TourTarget>
 
       {searching ? <SearchResults query={query.trim()} /> : null}
 
       {!searching && programmes.length > 0 ? (
-        <Section title={programmes.length === 1 ? 'Dein Programm' : 'Deine Programme'}>
-          <View style={{ gap: space.l }}>
-            {programmes.map((product) => <ProductTile key={product.id} product={product} />)}
-          </View>
-        </Section>
+        <TourTarget id="inhalte.programmes">
+          <Section title={programmes.length === 1 ? 'Dein Programm' : 'Deine Programme'}>
+            <View style={{ gap: space.l }}>
+              {programmes.map((product) => <ProductTile key={product.id} product={product} />)}
+            </View>
+          </Section>
+        </TourTarget>
       ) : null}
 
       {!searching && downloads.length > 0 ? (
-        <Section title="Deine Downloads">
-          <View style={{ gap: space.s }}>
-            {downloads.map((f) => <DownloadRow key={f.id} file={f} />)}
-          </View>
-        </Section>
+        <TourTarget id="inhalte.downloads">
+          <Section title="Deine Downloads">
+            <View style={{ gap: space.s }}>
+              {downloads.map((f) => <DownloadRow key={f.id} file={f} />)}
+            </View>
+          </Section>
+        </TourTarget>
       ) : null}
 
       {!searching && lib.free.length > 0 ? (
@@ -104,28 +113,32 @@ export default function LibraryScreen() {
       ) : null}
 
       {!searching && continueWatching.length > 0 ? (
-        <Section title="Weiterschauen">
-          <FlatList
-            horizontal
-            data={continueWatching}
-            keyExtractor={(v) => v.id}
-            renderItem={({ item }) => <ContinueTile video={item} />}
-            ItemSeparatorComponent={() => <View style={{ width: space.m }} />}
-            showsHorizontalScrollIndicator={false}
-            style={{ marginHorizontal: -space.l }}
-            contentContainerStyle={{ paddingHorizontal: space.l }}
-          />
-        </Section>
+        <TourTarget id="inhalte.continue">
+          <Section title="Weiterschauen">
+            <FlatList
+              horizontal
+              data={continueWatching}
+              keyExtractor={(v) => v.id}
+              renderItem={({ item }) => <ContinueTile video={item} />}
+              ItemSeparatorComponent={() => <View style={{ width: space.m }} />}
+              showsHorizontalScrollIndicator={false}
+              style={{ marginHorizontal: -space.l }}
+              contentContainerStyle={{ paddingHorizontal: space.l }}
+            />
+          </Section>
+        </TourTarget>
       ) : null}
 
       {!searching && bookmarks.list.length > 0 ? (
-        <Section title="Merkliste">
-          <View style={{ gap: space.s }}>
-            {bookmarks.list.map((b) => (
-              <LessonLink key={b.id} id={b.id} title={b.title} subtitle={`${b.categoryTitle} · ${kindLabel(b.kind, b.durationSec)}`} icon="bookmark" />
-            ))}
-          </View>
-        </Section>
+        <TourTarget id="inhalte.bookmarks">
+          <Section title="Merkliste">
+            <View style={{ gap: space.s }}>
+              {bookmarks.list.map((b) => (
+                <LessonLink key={b.id} id={b.id} title={b.title} subtitle={`${b.categoryTitle} · ${kindLabel(b.kind, b.durationSec)}`} icon="bookmark" />
+              ))}
+            </View>
+          </Section>
+        </TourTarget>
       ) : null}
 
       {!searching && empty ? (

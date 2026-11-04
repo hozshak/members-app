@@ -1,0 +1,184 @@
+// The assistant of the app (owner 04.11.2026): one short tour per tab, the first time the tab is opened. It lights up the thing it talks
+// about and says what it is; first the start page with a circle around each tab, the other tabs when the member opens them. A step whose
+// thing is not on the screen (no downloads, no routine) is left out. Remembered on this phone; "Einführung ansehen" in the profile starts
+// over. This file is the state, components/tour.tsx draws it.
+import { router, useFocusEffect, type Href } from 'expo-router';
+import { useCallback, useEffect, useRef, useSyncExternalStore, type ComponentRef, type RefObject } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from 'react-native';
+import { getItem, setItem } from './storage';
+
+type ViewRef = ComponentRef<typeof View>;
+type ScrollRef = ComponentRef<typeof ScrollView>;
+
+export type TourId = 'start' | 'inhalte' | 'routine' | 'profil';
+
+/** `target`: a TourTarget on the screen; `tab`: an item of the tab bar; neither: a card in the middle. */
+export interface TourStep { target?: string; tab?: number; title: string; text: string }
+
+/** The tabs in the order of the tab bar. */
+export const TAB_ROUTES = ['/', '/inhalte', '/routine', '/profil'] as const;
+
+const STEPS: Record<TourId, TourStep[]> = {
+  start: [
+    { title: 'Willkommen bei {name}', text: 'Schön, dass du da bist! Ich zeige dir kurz, was wo ist. Die anderen Bereiche erkläre ich dir, sobald du sie zum ersten Mal öffnest.' },
+    { target: 'start.buttons', title: 'WhatsApp und Bewertung', text: 'Hier oben kommst du in die WhatsApp-Gruppe. Mit dem goldenen Stern gibst du eine Bewertung ab.' },
+    { target: 'start.quote', title: 'Zitat des Tages', text: 'Jeden Tag ein neues Zitat für dich.' },
+    { target: 'start.routine', title: 'Deine Routine heute', text: 'Ein Fingertipp, und du bist bei deinen Übungen für heute.' },
+    { target: 'start.progress', title: 'Dein Fortschritt', text: 'So weit bist du in deinen Programmen und in der Routine. Tippe drauf, und du bist direkt dort.' },
+    { tab: 1, title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
+    { tab: 2, title: 'Routine', text: 'Hier ist dein tägliches Training: Übungen zum Mitmachen, Abhaken und deine Fotos.' },
+    { tab: 3, title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
+  ],
+  inhalte: [
+    { target: 'inhalte.search', title: 'Suche', text: 'Hier findest du jede Übung und jede Lektion.' },
+    { target: 'inhalte.programmes', title: 'Deine Programme', text: 'Tippe auf ein Programm. Darin findest du alle Videos, schön der Reihe nach.' },
+    { target: 'inhalte.downloads', title: 'Deine Downloads', text: 'Hier liegen deine PDFs, zum Öffnen und zum Herunterladen.' },
+    { target: 'inhalte.continue', title: 'Weiterschauen', text: 'Die Videos aus deinen Programmen, die du angefangen hast.' },
+    { target: 'inhalte.bookmarks', title: 'Merkliste', text: 'Was du dir in einer Lektion merkst, steht hier.' },
+  ],
+  routine: [
+    { target: 'routine.hero', title: 'Deine Routine heute', text: 'Hier startest du deine Übungen von heute. Die Videos zeigen dir, wie es geht.' },
+    { target: 'routine.days', title: 'Deine letzten 14 Tage', text: 'Jeder Tag, an dem du deine Routine gemacht hast, bekommt einen Haken.' },
+    { target: 'routine.reminder', title: 'Erinnerung', text: 'Die Erinnerung ist noch aus. Wir empfehlen sie dir, dann bleibst du leichter dran.' },
+    { target: 'routine.check', title: 'Heute abhaken', text: 'Hake deine Übungen einzeln ab. Hast du dich vertippt, nimmst du den Haken einfach wieder raus.' },
+    { target: 'routine.photos', title: 'Fortschrittsfotos', text: 'So siehst du, was sich verändert. Die Fotos bleiben nur auf deinem Handy.' },
+    { target: 'routine.zones', title: 'Gezielt üben', text: 'Einzelne Bereiche wie Stirn, Kinn oder Hals. Das wird frei, sobald du deine empfohlene Routine geschafft hast.' },
+    { target: 'routine.goal', title: 'Mein Ziel', text: 'Setz dir ein eigenes Ziel. Der Balken zeigt dir, wie nah du ihm schon bist.' },
+  ],
+  profil: [
+    { target: 'profil.frame', title: 'Dein Rahmen', text: 'Mit jedem Übungstag wird der Rahmen um dein Foto schöner. Das Ausrufezeichen zeigt dir alle Stufen.' },
+    { target: 'profil.reminders', title: 'Erinnerungen', text: 'Hier stellst du ein, wann dich die App an deine Routine erinnert.' },
+    { target: 'profil.icon', title: 'App-Icon', text: 'Such dir aus, wie die App auf deinem Home-Bildschirm aussieht.' },
+    { target: 'profil.intro', title: 'Einführung ansehen', text: 'Hier kannst du dir das alles noch einmal zeigen lassen.' },
+  ],
+};
+
+const KEY = 'members.tour';
+
+export interface ActiveTour { tour: TourId; steps: TourStep[]; index: number }
+
+let active: ActiveTour | null = null;
+let seen: Partial<Record<TourId, boolean>> | null = null;
+const listeners = new Set<() => void>();
+const targets = new Map<string, RefObject<ViewRef | null>>();
+const scrollers = new Map<TourId, { ref: RefObject<ScrollRef | null>; y: number }>();
+
+const emit = () => listeners.forEach((l) => l());
+
+function subscribe(l: () => void): () => void {
+  listeners.add(l);
+  return () => { listeners.delete(l); };
+}
+
+/** The running tour, null when there is none. */
+export function useActiveTour(): ActiveTour | null {
+  return useSyncExternalStore(subscribe, () => active, () => active);
+}
+
+async function loadSeen(): Promise<Partial<Record<TourId, boolean>>> {
+  if (seen) return seen;
+  try {
+    const raw = await getItem(KEY);
+    seen = raw ? (JSON.parse(raw) as Partial<Record<TourId, boolean>>) : {};
+  } catch {
+    seen = {};
+  }
+  return seen;
+}
+
+async function beginIfNew(tour: TourId): Promise<void> {
+  const state = await loadSeen();
+  if (active || state[tour]) return;
+  const steps = STEPS[tour].filter((s) => !s.target || targets.has(s.target));
+  if (steps.length === 0) return;
+  active = { tour, steps, index: 0 };
+  emit();
+}
+
+/** On the first screen of a tab: its tour, the first time the tab is opened (`ready`: its content is there). */
+export function useTourOnFocus(tour: TourId, ready: boolean): void {
+  useFocusEffect(useCallback(() => {
+    if (!ready) return;
+    // the screen has to stand before the tour can point at it
+    const t = setTimeout(() => void beginIfNew(tour), 500);
+    return () => clearTimeout(t);
+  }, [tour, ready]));
+}
+
+export function nextTourStep(): void {
+  if (!active) return;
+  if (active.index + 1 >= active.steps.length) {
+    endTour();
+    return;
+  }
+  active = { ...active, index: active.index + 1 };
+  emit();
+}
+
+export function endTour(): void {
+  if (!active) return;
+  const { tour } = active;
+  active = null;
+  seen = { ...seen, [tour]: true };
+  void setItem(KEY, JSON.stringify(seen));
+  scrollers.get(tour)?.ref.current?.scrollTo({ y: 0, animated: true });
+  emit();
+}
+
+/** "Einführung ansehen": everything from the start page on. */
+export function replayTours(): void {
+  seen = {};
+  void setItem(KEY, '{}');
+  router.navigate('/' as Href);
+}
+
+/** The thing a step points at registers itself under its name. */
+export function useTourTargetRef(id: string): RefObject<ViewRef | null> {
+  const ref = useRef<ViewRef>(null);
+  useEffect(() => {
+    targets.set(id, ref);
+    return () => {
+      if (targets.get(id) === ref) targets.delete(id);
+    };
+  }, [id]);
+  return ref;
+}
+
+export interface Box { x: number; y: number; width: number; height: number }
+
+/** Where the thing stands on the screen; null when it is not there. */
+export function measureTarget(id: string): Promise<Box | null> {
+  const view = targets.get(id)?.current;
+  if (!view) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    view.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }));
+  });
+}
+
+/** The page of a tab: the tour scrolls it to what it talks about. */
+export function useTourScroll(tour?: TourId): RefObject<ScrollRef | null> {
+  const ref = useRef<ScrollRef>(null);
+  useEffect(() => {
+    if (!tour) return;
+    const entry = { ref, y: 0 };
+    scrollers.set(tour, entry);
+    return () => {
+      if (scrollers.get(tour) === entry) scrollers.delete(tour);
+    };
+  }, [tour]);
+  return ref;
+}
+
+/** How far the page of a tab is scrolled. */
+export function noteTourScroll(tour: TourId, e: NativeSyntheticEvent<NativeScrollEvent>): void {
+  const s = scrollers.get(tour);
+  if (s) s.y = e.nativeEvent.contentOffset.y;
+}
+
+/** Scrolls the page of the tour by this much. False when it cannot. */
+export function scrollTourBy(tour: TourId, delta: number): boolean {
+  const s = scrollers.get(tour);
+  if (!s?.ref.current) return false;
+  s.ref.current.scrollTo({ y: Math.max(0, s.y + delta), animated: true });
+  return true;
+}

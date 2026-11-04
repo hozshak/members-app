@@ -62,9 +62,6 @@ export interface LessonPlayerProps {
   onFileFailed?: () => void;
   /** coach: a very small picture (no button, no text). */
   mini?: boolean;
-  /** coach: without sound. */
-  muted?: boolean;
-  onToggleMuted?: () => void;
 }
 
 /** After this long without data the waiting indicator also says why. */
@@ -80,17 +77,13 @@ function seek(player: VideoPlayer, at: number): void {
   player.currentTime = at;
 }
 
-function setMuted(player: VideoPlayer, muted: boolean): void {
-  player.muted = muted;
-}
-
 /** Development: what happened to the stream, in the log of the dev server (never the address: it carries the token). */
 function logVideo(what: string, detail?: string): void {
   if (__DEV__) console.warn(`[Video] ${what}${detail ? `: ${detail.replace(/([?&]t=)[^&\s]+/g, '$1…')}` : ''}`);
 }
 
 export function LessonPlayer({
-  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false, muted = false, onToggleMuted,
+  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false,
 }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
@@ -103,9 +96,7 @@ export function LessonPlayer({
   const focused = useIsFocused();
   const player = useVideoPlayer(null, (p) => {
     p.loop = coach;
-    // the small sounds of the routine play along instead of stopping the video
-    if (coach) p.audioMixingMode = 'mixWithOthers';
-    else p.timeUpdateEventInterval = 1;
+    if (!coach) p.timeUpdateEventInterval = 1;
   });
   // lesson: the whole screen (only one picture at a time: the player moves over)
   const [large, setLarge] = useState(false);
@@ -236,11 +227,6 @@ export function LessonPlayer({
       player.play();
     }
   }, [coach, focused, player]);
-
-  // coach: the sound of the video
-  useEffect(() => {
-    if (coach) setMuted(player, muted);
-  }, [coach, muted, player]);
 
   // coach: it should play: stopped from outside it goes on; a picture that stands still anyway counts as waiting (no status
   // tells that)
@@ -406,7 +392,6 @@ export function LessonPlayer({
         <View style={{ position: 'absolute', left: space.s, bottom: space.s, flexDirection: 'row', gap: space.xs }}>
           <RoundIcon icon="play-back" label="10 Sekunden zurück" onPress={() => player.seekBy(-10)} />
           <RoundIcon icon="refresh" label="Video neu laden" onPress={() => void reload('Knopf')} />
-          {onToggleMuted ? <RoundIcon icon={muted ? 'volume-mute' : 'volume-high'} label={muted ? 'Video-Ton einschalten' : 'Video stumm schalten'} onPress={onToggleMuted} /> : null}
         </View>
       ) : null}
       {!coach && !failed ? (

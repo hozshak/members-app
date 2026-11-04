@@ -1,6 +1,7 @@
 // Profile overview: photo (tap to change or remove — chosen from the phone, cropped square, sent as a 512 px JPEG) in a frame that gets
-// finer with the days practised (lib/frame.ts); name, e-mail and member number; the settings in the app; the introduction again; legal pages of the community in the browser; log out;
-// switch the community.
+// finer with the days practised (lib/frame.ts; the exclamation mark explains it); name, e-mail and member number; the settings in the app;
+// the icon of the app; the introduction again; legal pages of the community in the browser; log out; switch the community.
+import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,25 +10,31 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FrameRing, FramesPopup } from '@/components/frame-ring';
+import { TourTarget } from '@/components/tour';
 import { Button, MenuGroup, MenuRow, Screen, Txt } from '@/components/ui';
-import { showIntro } from '@/components/intro-tour';
 import { errorText } from '@/lib/api';
 import { frameOf } from '@/lib/frame';
 import { overallStats } from '@/lib/plans';
 import { useRoutines } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { space, usePalette } from '@/lib/theme';
+import { replayTours, useTourOnFocus } from '@/lib/tour';
 
 export default function ProfileScreen() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const { me, community, api, logout, forgetCommunity, refreshMe } = useSession();
   const [busy, setBusy] = useState(false);
+  const [framesOpen, setFramesOpen] = useState(false);
   const routines = useRoutines();
+  useTourOnFocus('profil', !routines.isPending);
   if (!community || !api) return null;
   const hasRoutines = (routines.data?.length ?? 0) > 0;
-  const frame = frameOf(overallStats(routines.data));
+  const stats = overallStats(routines.data);
+  const frame = frameOf(stats);
   const name = me?.displayName || [me?.firstName, me?.lastName].filter(Boolean).join(' ') || me?.email || '';
+  const initial = (name.trim()[0] ?? '?').toLocaleUpperCase('de-DE');
 
   const pickPhoto = async () => {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 1 });
@@ -64,19 +71,17 @@ export default function ProfileScreen() {
   ]);
 
   return (
-    <Screen contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
-      <View style={{ gap: space.m, alignItems: 'flex-start' }}>
+    <Screen tour="profil" contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
+      <TourTarget id="profil.frame" style={{ gap: space.m, alignItems: 'flex-start' }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Profilfoto ändern" onPress={photoMenu}>
-          <View style={{ width: 92, height: 92, borderRadius: 46, borderWidth: frame.width, borderColor: frame.color ?? p.line, padding: 2, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ flex: 1, alignSelf: 'stretch', borderRadius: 46, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {me?.avatarUrl ? (
-                <Image source={{ uri: api.url(me.avatarUrl), headers: api.mediaHeaders() }} style={StyleSheet.absoluteFill} contentFit="cover" />
-              ) : (
-                <Txt variant="display" color={p.accent}>{(name.trim()[0] ?? '?').toLocaleUpperCase('de-DE')}</Txt>
-              )}
-              {busy ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }]}><ActivityIndicator color="#FFFFFF" /></View> : null}
-            </View>
-          </View>
+          <FrameRing frame={frame} size={92}>
+            {me?.avatarUrl ? (
+              <Image source={{ uri: api.url(me.avatarUrl), headers: api.mediaHeaders() }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            ) : (
+              <Txt variant="display" color={p.accent}>{initial}</Txt>
+            )}
+            {busy ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }]}><ActivityIndicator color="#FFFFFF" /></View> : null}
+          </FrameRing>
           <Txt variant="small" color={p.accent} style={{ marginTop: space.xs, textAlign: 'center' }}>Foto ändern</Txt>
         </Pressable>
         <View style={{ gap: 2 }}>
@@ -84,22 +89,31 @@ export default function ProfileScreen() {
           {me?.email && me.email !== name ? <Txt muted>{me.email}</Txt> : null}
           <Txt variant="small" muted>Mitglied bei {community.name}{me?.memberNo ? ` · Nr. ${me.memberNo}` : ''}</Txt>
           {hasRoutines ? (
-            <Txt variant="small" color={frame.color ?? p.textMuted} style={{ fontWeight: '700', marginTop: space.xs }}>
-              {frame.level === 0 ? 'Dein Rahmen' : `${frame.name}-Rahmen`}
-              {frame.next ? ` · noch ${frame.next.days === 1 ? '1 Übungstag' : `${frame.next.days} Übungstage`} bis ${frame.next.name}` : ''}
-            </Txt>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityHint="Erklärt den Rahmen und zeigt alle Stufen"
+              onPress={() => setFramesOpen(true)}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 36, marginTop: space.xs, opacity: pressed ? 0.6 : 1 })}
+            >
+              <Txt variant="small" style={{ fontWeight: '700', flexShrink: 1 }}>
+                {frame.level === 0 ? 'Dein Rahmen' : `${frame.name}-Rahmen`}
+                {frame.next ? ` · noch ${frame.next.days === 1 ? '1 Übungstag' : `${frame.next.days} Übungstage`} bis ${frame.next.name}` : ''}
+              </Txt>
+              <Ionicons name="alert-circle" size={22} color={p.accent} />
+            </Pressable>
           ) : null}
         </View>
-      </View>
+      </TourTarget>
 
       <MenuGroup>
         <MenuRow icon="person-outline" label="Persönliche Daten" onPress={() => router.push('/profil/daten' as Href)} />
         <MenuRow icon="key-outline" label="Passwort ändern" onPress={() => router.push('/profil/passwort' as Href)} />
-        <MenuRow icon="alarm-outline" label="Erinnerungen" onPress={() => router.push('/profil/erinnerungen' as Href)} />
+        <TourTarget id="profil.reminders"><MenuRow icon="alarm-outline" label="Erinnerungen" onPress={() => router.push('/profil/erinnerungen' as Href)} /></TourTarget>
         <MenuRow icon="notifications-outline" label="Benachrichtigungen" onPress={() => router.push('/profil/benachrichtigungen' as Href)} />
         <MenuRow icon="phone-portrait-outline" label="Geräte" onPress={() => router.push('/profil/geraete' as Href)} />
         <MenuRow icon="bag-handle-outline" label="Meine Käufe" onPress={() => router.push('/profil/kaeufe' as Href)} />
-        <MenuRow icon="compass-outline" label="Einführung ansehen" onPress={showIntro} />
+        <TourTarget id="profil.icon"><MenuRow icon="color-palette-outline" label="App-Icon" onPress={() => router.push('/profil/app-icon' as Href)} /></TourTarget>
+        <TourTarget id="profil.intro"><MenuRow icon="compass-outline" label="Einführung ansehen" onPress={replayTours} /></TourTarget>
       </MenuGroup>
 
       <MenuGroup>
@@ -111,6 +125,8 @@ export default function ProfileScreen() {
         <Button label="Abmelden" kind="secondary" onPress={() => void logout()} />
         <Button label="Anderen Memberbereich wählen" kind="ghost" onPress={() => void forgetCommunity()} />
       </View>
+
+      {framesOpen ? <FramesPopup days={stats.totalDays} initial={initial} onClose={() => setFramesOpen(false)} /> : null}
     </Screen>
   );
 }

@@ -251,7 +251,12 @@ function Plan({ routine }: { routine: MemberRoutine }) {
               ))}
             </View>
           </Section>
-          <Button label={routine.stats.doneToday ? 'Heute erledigt: noch einmal machen' : 'Routine starten'} kind={routine.stats.doneToday ? 'secondary' : 'primary'} onPress={() => openRoutine(routine.id)} />
+          {routine.stats.doneToday ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s, minHeight: 50 }}>
+              <Ionicons name="checkmark-circle" size={22} color={p.accent} />
+              <Txt variant="heading">Heute erledigt. Bis morgen!</Txt>
+            </View>
+          ) : <Button label="Routine starten" onPress={() => openRoutine(routine.id)} />}
           {lastDay && routine.stats.doneToday && !after ? <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} /> : null}
         </>
       ) : null}

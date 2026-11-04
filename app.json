@@ -11,7 +11,6 @@
     "ios": {
       "bundleIdentifier": "com.en0o0n.members",
       "supportsTablet": true,
-      "icon": "./assets/expo.icon",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -19,10 +18,8 @@
     "android": {
       "package": "com.en0o0n.members",
       "adaptiveIcon": {
-        "backgroundColor": "#F6F4F1",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#E3A79D",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -36,8 +33,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F6F4F1",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76,
+          "image": "./assets/images/icon-preview-rose.png",
+          "imageWidth": 120,
           "dark": {
             "backgroundColor": "#121110"
           }
@@ -83,14 +80,6 @@
         }
       ],
       [
-        "expo-audio",
-        {
-          "microphonePermission": false,
-          "recordAudioAndroid": false,
-          "enableBackgroundPlayback": false
-        }
-      ],
-      [
         "expo-widgets",
         {
           "enableAndroid": true,
@@ -120,7 +109,20 @@
           ]
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Gold",
+            "ios": "./assets/images/icon-gold.png",
+            "android": {
+              "foregroundImage": "./assets/images/android-icon-gold-foreground.png",
+              "backgroundColor": "#E3A79D"
+            }
+          }
+        ]
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

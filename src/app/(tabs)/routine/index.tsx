@@ -1,15 +1,17 @@
 // Routine overview, the most important first: today's routine with the big start button, how far today and the last 14 days at
-// a glance; the plans under way ("Von Mailin empfohlen", zones); the exercises to tick off (all ticked = day done, unticking or
-// "Zurücksetzen" opens the day again); the progress photos (optionally behind Face ID); "Gezielt üben" (plans and short sessions
-// by zone); the member's own goal ("Mein Ziel" with a progress bar and a forecast); a challenge when the coach made the routine one
-// ("Tag 12 von 30"). The reminders are under "Profil".
+// a glance; a hint that recommends the reminder while it is off; the plans under way ("Von Mailin empfohlen", zones); the exercises to
+// tick off (all ticked = day done, unticking or "Zurücksetzen" opens the day again); the progress photos (optionally behind Face ID);
+// "Gezielt üben" (plans and short sessions by zone); the member's own goal ("Mein Ziel" with a progress bar and a forecast); a challenge
+// when the coach made the routine one ("Tag 12 von 30"). The settings of the reminders are under "Profil".
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { openPlan, openRoutine, ProgressRing, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
+import { ReminderPopup } from '@/components/reminder-popup';
+import { ExerciseThumb, openPlan, openRoutine, ProgressRing, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
+import { TourTarget } from '@/components/tour';
 import { Button, Card, ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
@@ -17,11 +19,61 @@ import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { mainRoutine, overallStats, planLabel, planState, useSwaps, withSwaps } from '@/lib/plans';
 import {
-  listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
+  allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
   type MemberRoutine, type ProgressPhoto, type RoutineStats,
 } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
+import { useTourOnFocus } from '@/lib/tour';
+
+/** The reminder is off until the member allows notifications: this says so and recommends it, one tap away. */
+function ReminderHint({ routine }: { routine: MemberRoutine }) {
+  const p = usePalette();
+  const [prefs, update] = useRoutinePrefs();
+  const [choosing, setChoosing] = useState(false);
+  const turnOn = async () => {
+    if (!(await allowNotifications())) {
+      Alert.alert('Mitteilungen sind aus', 'Erlaube Mitteilungen für die App in den Einstellungen deines Handys, dann klappt die Erinnerung.');
+      return;
+    }
+    await syncReminders(update({ reminder: true }), routine);
+    setChoosing(true);
+  };
+  return (
+    <>
+      {!prefs.reminder && !prefs.reminderHintClosed ? (
+        <TourTarget id="routine.reminder">
+          <Card style={{ padding: space.l, gap: space.m }}>
+            <View style={{ flexDirection: 'row', gap: space.m }}>
+              <Ionicons name="alarm-outline" size={26} color={p.accent} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt variant="heading">Erinnerung einschalten?</Txt>
+                <Txt variant="small" muted>Die tägliche Erinnerung ist noch aus. Wir empfehlen sie dir, damit du leichter dranbleibst. Die Uhrzeit wählst du selbst.</Txt>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: space.m }}>
+              <Button label="Nicht jetzt" kind="secondary" onPress={() => update({ reminderHintClosed: true })} style={{ flex: 1, paddingHorizontal: space.m }} />
+              <Button label="Einschalten" onPress={() => void turnOn()} style={{ flex: 1, paddingHorizontal: space.m }} />
+            </View>
+          </Card>
+        </TourTarget>
+      ) : null}
+      {choosing ? (
+        <ReminderPopup
+          title="Tägliche Erinnerung"
+          hint="Wann ist Zeit für deine Routine?"
+          hour={prefs.hour}
+          minute={prefs.minute}
+          onSave={(hour, minute) => {
+            void syncReminders(update({ hour, minute }), routine);
+            setChoosing(false);
+          }}
+          onClose={() => setChoosing(false)}
+        />
+      ) : null}
+    </>
+  );
+}
 
 /** "Mein Ziel": the goal in the member's words, a big bar (routine days done of those needed), this week as dots and a
  *  sentence that says how close it is ("Bleib dran: So erreichst du dein Ziel am 24. November."). */
@@ -97,7 +149,7 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
   return (
     <Section title="Heute abhaken" action={<Txt variant="small" muted>{ticked} von {routine.steps.length}</Txt>}>
       <View style={{ gap: space.s }}>
-        {routine.steps.map((s, i) => {
+        {routine.steps.map((s) => {
           const on = doneToday || checks.isDone(s.id);
           return (
             <Pressable
@@ -111,7 +163,8 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
               <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                 {on ? <Ionicons name="checkmark" size={16} color={p.onAccent} /> : null}
               </View>
-              <Txt variant="heading" style={{ flex: 1, textDecorationLine: on ? 'line-through' : 'none', opacity: on ? 0.6 : 1 }} numberOfLines={2}>{i + 1}. {s.title}</Txt>
+              <ExerciseThumb step={s} />
+              <Txt variant="heading" style={{ flex: 1, textDecorationLine: on ? 'line-through' : 'none', opacity: on ? 0.6 : 1 }} numberOfLines={2}>{s.title}</Txt>
               <Txt variant="small" muted>{clock(stepSeconds(s))}</Txt>
             </Pressable>
           );
@@ -194,6 +247,7 @@ function TodayHero({ routine, days }: { routine: MemberRoutine; days: string[] }
   const total = routine.steps.length;
   const ticked = done ? total : routine.steps.filter((s) => checks.isDone(s.id)).length;
   return (
+    <TourTarget id="routine.hero">
     <Card style={{ padding: space.l, gap: space.l, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
         <View style={{ flex: 1, gap: space.xs }}>
@@ -208,12 +262,13 @@ function TodayHero({ routine, days }: { routine: MemberRoutine; days: string[] }
           {done ? <Ionicons name="checkmark" size={32} color={p.accent} /> : <Txt variant="heading" style={{ fontVariant: ['tabular-nums'] }}>{ticked}/{total}</Txt>}
         </ProgressRing>
       </View>
-      <TwoWeeks days={days} plan={state === 'running' ? routine.challenge : null} />
+      <TourTarget id="routine.days"><TwoWeeks days={days} plan={state === 'running' ? routine.challenge : null} /></TourTarget>
       {state === 'open' || state === 'over'
         ? <Button label={state === 'open' ? 'Ansehen und starten' : 'Ergebnis ansehen'} onPress={() => openPlan(routine.id)} />
-        : <Button label={done ? 'Noch einmal machen' : 'Routine starten'} kind={done ? 'secondary' : 'primary'} onPress={() => openRoutine(routine.id)} />}
+        : done ? null : <Button label="Routine starten" onPress={() => openRoutine(routine.id)} />}
       {state === 'running' ? <Button label="Zum Plan" kind="ghost" onPress={() => openPlan(routine.id)} /> : null}
     </Card>
+    </TourTarget>
   );
 }
 
@@ -264,6 +319,7 @@ export default function RoutineScreen() {
   const [prefs] = useRoutinePrefs();
   const swaps = useSwaps();
   const main = mainRoutine(q.data);
+  useTourOnFocus('routine', !q.isPending);
 
   // keep the scheduled reminders in line with the settings and the routine
   useEffect(() => {
@@ -279,7 +335,7 @@ export default function RoutineScreen() {
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
 
   return (
-    <Screen onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
+    <Screen tour="routine" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
         <Txt variant="display">Routine</Txt>
         {stats.streak > 0 ? (
@@ -297,17 +353,18 @@ export default function RoutineScreen() {
             <Txt variant="title">Noch keine Routine</Txt>
             <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier, mit Timer und Erinnerung.</Txt>
           </Card>
-          <PhotosCard />
+          <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
           <ZonesSection />
         </>
       ) : (
         <>
           <TodayHero routine={today} days={stats.days} />
+          <ReminderHint routine={main} />
           {plans.map((r) => <PlanCard key={r.id} routine={r} />)}
-          {!main.plan || planState(main) === 'running' ? <TodayChecklist routine={today} /> : null}
-          <PhotosCard />
+          {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}
+          <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
           <ZonesSection />
-          <GoalCard stats={stats} />
+          <TourTarget id="routine.goal"><GoalCard stats={stats} /></TourTarget>
           {main.plan ? null : <ChallengeBlock routine={main} />}
         </>
       )}
