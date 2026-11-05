@@ -10,7 +10,8 @@ export interface ProgrammeIntroLevel { label: string; hint: string; text: string
 export interface ProgrammeIntroPage { title: string; text: string }
 export interface ProgrammeIntro { title: string; lead: string; question: string; levels: ProgrammeIntroLevel[]; pages: ProgrammeIntroPage[]; closing: string }
 
-export interface IntroState { seen: boolean; level: number | null }
+/** `seen`: it opened by itself once. `finished`: gone through to the end or on into a category; until then the start page keeps pointing to it (leaving it by accident loses nothing). */
+export interface IntroState { seen: boolean; level: number | null; finished?: boolean }
 
 const KEY = 'members.intros';
 const NONE: IntroState = { seen: false, level: null };

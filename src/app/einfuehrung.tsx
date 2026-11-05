@@ -38,7 +38,12 @@ function Pager({ product, intro, base }: { product: MemberProductDetail; intro: 
   }, [product.id]);
 
   const close = () => router.back();
+  const finish = () => {
+    setIntroState(product.id, { finished: true });
+    router.back();
+  };
   const openCategory = (slug: string) => {
+    setIntroState(product.id, { finished: true });
     router.back();
     router.push(`${base}/kategorie/${encodeURIComponent(slug)}` as Href);
   };
@@ -136,7 +141,7 @@ function Pager({ product, intro, base }: { product: MemberProductDetail; intro: 
 
       {page.kind !== 'where' || intro.levels.length === 0 ? (
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.m, backgroundColor: p.bg, borderTopColor: p.line }]}>
-          <Button label={isLast ? 'Los geht’s' : 'Weiter'} onPress={isLast ? close : () => setIndex(index + 1)} />
+          <Button label={isLast ? 'Los geht’s' : 'Weiter'} onPress={isLast ? finish : () => setIndex(index + 1)} />
         </View>
       ) : null}
     </View>

@@ -1,5 +1,5 @@
 // The way to the introduction of a programme (lib/intro.ts). On its page: the start the member chose with its categories, or the way in; it also opens by itself the first
-// time. On the start page: a hint per programme until its introduction has been seen.
+// time. On the start page: a hint per programme until its introduction has been gone through.
 import { Ionicons } from '@expo/vector-icons';
 import { useSegments } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -67,7 +67,7 @@ function IntroHint({ product }: { product: MemberProduct }) {
   const p = usePalette();
   const base = useBase();
   const state = useIntroState(product.id);
-  if (!product.intro || state.seen) return null;
+  if (!product.intro || state.finished) return null;
   return (
     <Card onPress={() => openIntro(product.slug, base)} accessibilityLabel={`${product.intro.title}: ${product.title}`} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, backgroundColor: p.accentSoft, borderColor: 'transparent' }}>
       <Ionicons name="compass-outline" size={26} color={p.accent} />
