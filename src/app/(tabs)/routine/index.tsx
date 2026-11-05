@@ -2,7 +2,8 @@
 // plan with its 14 days, a tap leads to the whole plan; without a plan the last 14 days); a small hint that recommends the reminder while it is
 // off; the exercises to tick off (all ticked = day done, a tap on one takes its tick back and opens the day again); the progress photos
 // (optionally behind Face ID); the member's own goal; "Gezielt üben" (plans and short sessions by zone); a challenge when the coach made the
-// routine one ("Tag 12 von 30"). A tap on the flame says what it counts. The settings of the reminders are under "Profil".
+// routine one ("Tag 12 von 30"). A tap on the flame says what it counts. The settings of the reminders are under "Profil". When the coach offers a check-in
+// (lib/progress-check.ts) the app suggests it below the plan when it is due, and "Deine Check-ins" leads to the ones done so far.
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, type Href } from 'expo-router';
@@ -10,6 +11,7 @@ import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CheckInsRow, CheckInSuggestion } from '@/components/check-in-parts';
 import { ReminderPopup } from '@/components/reminder-popup';
 import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openPlan, openRoutine, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
 import { TourTarget } from '@/components/tour';
@@ -462,16 +464,19 @@ export default function RoutineScreen() {
             <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier, mit Timer und Erinnerung.</Txt>
           </Card>
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
+          <CheckInsRow routine={null} />
           <ZonesSection />
         </>
       ) : (
         <>
           <TodayHero routine={today} />
           {showWay ? <WayCard routine={main} days={stats.days} /> : null}
+          <CheckInSuggestion routine={main} />
           <ReminderHint routine={main} />
           {plans.map((r) => <PlanCard key={r.id} routine={r} waiting={waitingFor(q.data, r)} />)}
           {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
+          <CheckInsRow routine={main} />
           <TourTarget id="routine.goal"><GoalCard stats={stats} closedText={goalClosed} /></TourTarget>
           <ZonesSection />
           {main.plan ? null : <ChallengeBlock routine={main} />}

@@ -3,13 +3,13 @@
 // (each can be swapped for another one of the zone, for today only), all days of the plan at a glance, the photos before and after, a new start
 // and the way out at the very end. At the end: the result, the after photo and the comparison. The goal of a zone plan becomes "Mein Ziel".
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CheckInCard, CheckInsRow } from '@/components/check-in-parts';
 import { LinkedText } from '@/components/linked-text';
-import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openRoutine } from '@/components/routine-parts';
+import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openRoutine, PhotoSlot } from '@/components/routine-parts';
 import { Button, Card, Cover, ErrorView, Loading, MenuGroup, MenuRow, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
@@ -17,6 +17,7 @@ import { useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { clearPlanPhotos, goalLabel, planLabel, planState, usePlanPhotos, usePlanStart, useSwaps, withSwaps } from '@/lib/plans';
+import { openCheckIn, useCheckDue } from '@/lib/progress-check';
 import { listPhotos, stepSeconds, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import { useZones, type MemberZoneExercise } from '@/lib/zones';
@@ -192,36 +193,6 @@ function PlanDays({ challenge, done }: { challenge: RoutineChallenge; done: read
   );
 }
 
-/** One side of "Vorher und Nachher": the photo, or what is to do here. */
-function PhotoSlot({ label, photo, empty, onPress }: { label: string; photo: ProgressPhoto | undefined; empty: { icon: keyof typeof Ionicons.glyphMap; text: string }; onPress?: () => void }) {
-  const p = usePalette();
-  const when = photo?.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={photo ? `${label}, ${when}` : `${label}: ${empty.text}`}
-      accessibilityState={{ disabled: !onPress }}
-      onPress={onPress}
-      style={{ flex: 1, aspectRatio: 3 / 4, borderRadius: radius.l, overflow: 'hidden', backgroundColor: p.surface, borderWidth: photo ? 0 : 1, borderColor: p.line }}
-    >
-      {photo ? (
-        <>
-          <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors />
-          <View style={{ position: 'absolute', left: space.s, bottom: space.s, paddingHorizontal: space.s, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-            <Txt variant="small" color="#FFFFFF" style={{ fontSize: 12, lineHeight: 16, fontWeight: '600' }}>{label} · {when}</Txt>
-          </View>
-        </>
-      ) : (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.s, padding: space.m }}>
-          <Ionicons name={empty.icon} size={28} color={onPress ? p.accent : p.textMuted} />
-          <Txt variant="heading">{label}</Txt>
-          <Txt variant="small" color={onPress ? p.accent : p.textMuted} style={{ textAlign: 'center' }}>{empty.text}</Txt>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
 function Plan({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const plan = usePlanStart(routine.id);
@@ -229,6 +200,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   const swaps = useSwaps();
   const zones = useZones();
   const [, setGoal] = useGoal();
+  const due = useCheckDue(routine);
   const [prefs] = useRoutinePrefs();
   const photosVisible = usePhotosVisible(prefs.photoLock);
   const info = routine.plan;
@@ -342,7 +314,8 @@ function Plan({ routine }: { routine: MemberRoutine }) {
               ? <HeroDone text="Heute erledigt. Bis morgen!" />
               : <HeroButton label={`Routine starten · ${minutes(todaySec)}`} icon="play" onPress={() => openRoutine(routine.id)} />}
           </HeroCard>
-          {lastDay && doneToday && !after ? <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} /> : null}
+          {due ? <CheckInCard routine={routine} due={due} /> : null}
+          {lastDay && doneToday && !after && !routine.progressCheck ? <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} /> : null}
           <Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')}</Txt>}>
             <MenuGroup>
               {today.steps.map((s) => (
@@ -360,6 +333,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
             <PlanDays challenge={ch} done={routine.stats.days} />
           </Section>
           {beforeAfter}
+          <CheckInsRow routine={routine} />
           {routine.description ? (
             <Section title="Über diesen Plan">
               <LinkedText text={routine.description} muted />
@@ -375,9 +349,12 @@ function Plan({ routine }: { routine: MemberRoutine }) {
       {state === 'over' && ch ? (
         <>
           <HeroCard imageUrl={picture} minHeight={240} label="Plan beendet" title={ch.completed ? 'Geschafft!' : 'Dein Plan ist zu Ende'} line={`${routine.title} · ${ch.doneDays} von ${ch.days} Tagen erledigt`}>
-            {!after ? <HeroButton label="Nachher-Foto machen" icon="camera" onPress={() => camera(routine.id, 'end')} /> : null}
+            {due === 'final'
+              ? <HeroButton label="Abschluss-Check machen" icon="ribbon" onPress={() => openCheckIn(routine.id)} />
+              : !after ? <HeroButton label="Nachher-Foto machen" icon="camera" onPress={() => camera(routine.id, 'end')} /> : null}
           </HeroCard>
           {beforeAfter}
+          <CheckInsRow routine={routine} />
           <Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
             <PlanDays challenge={ch} done={routine.stats.days} />
           </Section>

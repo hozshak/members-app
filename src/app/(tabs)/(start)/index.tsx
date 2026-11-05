@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeButtons, RatingPrompt } from '@/components/home-buttons';
 import { DailyQuote, ProgressOverview } from '@/components/home-parts';
+import { IntroHints } from '@/components/intro-card';
 import { RoutineTodayCard } from '@/components/routine-parts';
 import { TourTarget } from '@/components/tour';
 import { ErrorView, Loading, Screen, Txt } from '@/components/ui';
@@ -42,6 +43,8 @@ export default function HomeScreen() {
       </View>
       {h.buttons && h.buttons.length > 0 ? <TourTarget id="start.buttons"><HomeButtons buttons={h.buttons} /></TourTarget> : null}
       </View>
+
+      <IntroHints products={h.products} />
 
       <TourTarget id="start.quote"><DailyQuote /></TourTarget>
 

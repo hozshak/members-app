@@ -2,6 +2,7 @@
 // the picture of an exercise, the last 14 days, "Gezielt üben" (the zones: a zone with a plan leads to its plan), and the routine of today as a
 // card for the start page.
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
@@ -9,7 +10,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
-import { stepSeconds, useRoutines, type MemberRoutine, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
+import { stepSeconds, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
 import { TourTarget } from './tour';
@@ -311,5 +312,35 @@ export function RoutineTodayCard() {
         )}
       </Card>
     </TourTarget>
+  );
+}
+
+/** One side of "Vorher und Nachher": the photo, or what is to do here. */
+export function PhotoSlot({ label, photo, empty, onPress }: { label: string; photo: ProgressPhoto | undefined; empty: { icon: keyof typeof Ionicons.glyphMap; text: string }; onPress?: () => void }) {
+  const p = usePalette();
+  const when = photo?.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={photo ? `${label}, ${when}` : `${label}: ${empty.text}`}
+      accessibilityState={{ disabled: !onPress }}
+      onPress={onPress}
+      style={{ flex: 1, aspectRatio: 3 / 4, borderRadius: radius.l, overflow: 'hidden', backgroundColor: p.surface, borderWidth: photo ? 0 : 1, borderColor: p.line }}
+    >
+      {photo ? (
+        <>
+          <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors />
+          <View style={{ position: 'absolute', left: space.s, bottom: space.s, paddingHorizontal: space.s, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)' }}>
+            <Txt variant="small" color="#FFFFFF" style={{ fontSize: 12, lineHeight: 16, fontWeight: '600' }}>{label} · {when}</Txt>
+          </View>
+        </>
+      ) : (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.s, padding: space.m }}>
+          <Ionicons name={empty.icon} size={28} color={onPress ? p.accent : p.textMuted} />
+          <Txt variant="heading">{label}</Txt>
+          <Txt variant="small" color={onPress ? p.accent : p.textMuted} style={{ textAlign: 'center' }}>{empty.text}</Txt>
+        </View>
+      )}
+    </Pressable>
   );
 }

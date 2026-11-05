@@ -1,9 +1,10 @@
 // A programme (product): cover, description, its categories in order (a programme with only one: its videos directly), its
-// PDFs and, at the end, what is new, as upright tiles to swipe through.
+// PDFs and, at the end, what is new, as upright tiles to swipe through. A programme with an introduction (lib/intro.ts) opens it the first time and keeps the member's start on top.
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { FlatList, View } from 'react-native';
 import { CategoryTile, NEW_TILE_WIDTH, NewTile } from '@/components/content';
 import { DownloadRow } from '@/components/download';
+import { IntroCard } from '@/components/intro-card';
 import { LessonList } from '@/components/lesson-list';
 import { LinkedText } from '@/components/linked-text';
 import { Cover, ErrorView, Loading, ProgressBar, Screen, Section, Txt } from '@/components/ui';
@@ -51,6 +52,8 @@ export default function ProductScreen() {
           </View>
         ) : null}
       </View>
+
+      <IntroCard product={product} />
 
       {categories.length > 0 ? (
         <Section title="Inhalte">

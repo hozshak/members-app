@@ -32,14 +32,14 @@ export function ProductTile({ product }: { product: MemberProduct }) {
   );
 }
 
-export function CategoryTile({ category }: { category: CategoryCard }) {
+export function CategoryTile({ category, onOpen }: { category: CategoryCard; onOpen?: () => void }) {
   const p = usePalette();
   const open = useOpen();
   const locked = category.access !== 'full';
   const share = category.videoCount > 0 ? category.doneCount / category.videoCount : 0;
   return (
     <Card
-      onPress={locked ? undefined : () => open.category(category.slug)}
+      onPress={locked ? undefined : (onOpen ?? (() => open.category(category.slug)))}
       accessibilityLabel={category.title}
       style={{ flexDirection: 'row', alignItems: 'center', padding: space.m, gap: space.m, opacity: locked ? 0.6 : 1 }}
     >

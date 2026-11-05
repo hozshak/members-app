@@ -34,6 +34,7 @@ import {
   stepSeconds, useCheckIn, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineStats,
 } from '@/lib/routine';
 import { overallStats } from '@/lib/plans';
+import { openCheckIn, useCheckDue } from '@/lib/progress-check';
 import { useApi } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 
@@ -140,6 +141,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const { width: screenW, height: screenH } = useWindowDimensions();
   const checkIn = useCheckIn(routine.id);
   const checks = useDayChecks(routine.id);
+  const checkInDue = useCheckDue(practice ? null : routine);
   const [prefs, update] = useRoutinePrefs();
   const [camPerm, requestCam] = useCameraPermissions();
   const [phase, setPhase] = useState<'ready' | 'count' | 'run'>('ready');
@@ -381,7 +383,14 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
               <Txt muted style={{ textAlign: 'center' }}>{routine.title} ist für heute erledigt. Bis morgen!</Txt>
             </>
           )}
-          {finished && routine.plan && routine.challenge?.dayNumber === routine.challenge?.days ? (
+          {finished && checkInDue ? (
+            <Button
+              label={checkInDue === 'final' ? 'Abschluss-Check machen' : 'Check-in machen'}
+              kind={checkInDue === 'final' ? 'primary' : 'secondary'}
+              onPress={() => openCheckIn(routine.id, true)}
+              style={{ alignSelf: 'stretch' }}
+            />
+          ) : finished && routine.plan && !routine.progressCheck && routine.challenge?.dayNumber === routine.challenge?.days ? (
             <Button label="Nachher-Foto machen" onPress={() => router.replace({ pathname: '/routine/kamera', params: { plan: routine.id, slot: 'end' } } as unknown as Href)} style={{ alignSelf: 'stretch' }} />
           ) : null}
           {finished && Platform.OS !== 'web' ? <Button label="Erfolg teilen" kind="secondary" onPress={() => void card.share()} style={{ alignSelf: 'stretch' }} /> : null}

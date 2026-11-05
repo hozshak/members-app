@@ -1,5 +1,7 @@
 // Answers of the member area API of the membership software (C:/Projekte/mitglieder-software, shared/types.ts).
 // A copy of the parts the app uses — keep in step with the software when its member API changes.
+import type { ProgrammeIntro } from './intro';
+
 export type Id = string;
 export type UnixSec = number;
 
@@ -67,6 +69,8 @@ export interface VideoDetail extends VideoCard {
 
 export interface MemberProduct {
   id: Id; slug: string; title: string; shortDescription: string; description: string; imageUrl: string | null;
+  /** The introduction of the programme (lib/intro.ts); null = none, missing on older installations. */
+  intro?: ProgrammeIntro | null;
   accessUntil: UnixSec | null; categories: CategoryCard[]; newCount: number; itemCount: number; doneCount: number; downloads: MemberDownload[];
 }
 export interface MemberProductDetail extends MemberProduct { newItems: VideoCard[] }

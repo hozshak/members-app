@@ -1,0 +1,55 @@
+// The introduction of a programme (owner 05.11.2026): how to start and with what. The coach writes it per programme in the dashboard (product.intro); the member says where
+// they stand ("Ich fange gerade an" / "Ich bin schon länger dabei"), sees what to start with and goes on through the coach's pages. It opens by itself the first time
+// the programme is opened and stays reachable on its page, which also keeps the chosen start. Kept on this phone: seen or not, and the choice.
+import { router, type Href } from 'expo-router';
+import { useSyncExternalStore } from 'react';
+import { getItem, setItem } from './storage';
+import type { Id } from './types';
+
+export interface ProgrammeIntroLevel { label: string; hint: string; text: string; categoryIds: Id[] }
+export interface ProgrammeIntroPage { title: string; text: string }
+export interface ProgrammeIntro { title: string; lead: string; question: string; levels: ProgrammeIntroLevel[]; pages: ProgrammeIntroPage[]; closing: string }
+
+export interface IntroState { seen: boolean; level: number | null }
+
+const KEY = 'members.intros';
+const NONE: IntroState = { seen: false, level: null };
+let state: Record<string, IntroState> = {};
+let loaded = false;
+let loading = false;
+const listeners = new Set<() => void>();
+
+function subscribe(l: () => void): () => void {
+  listeners.add(l);
+  if (!loading) {
+    loading = true;
+    void getItem(KEY).then((raw) => {
+      try {
+        if (raw) state = JSON.parse(raw) as Record<string, IntroState>;
+      } catch { /* starts empty */ }
+      loaded = true;
+      listeners.forEach((x) => x());
+    });
+  }
+  return () => { listeners.delete(l); };
+}
+
+/** Until the phone has answered, nothing opens by itself. */
+export function useIntrosLoaded(): boolean {
+  return useSyncExternalStore(subscribe, () => loaded, () => loaded);
+}
+
+export function useIntroState(productId: Id | undefined): IntroState {
+  return useSyncExternalStore(subscribe, () => (productId ? state[productId] ?? NONE : NONE), () => NONE);
+}
+
+export function setIntroState(productId: Id, patch: Partial<IntroState>): void {
+  state = { ...state, [productId]: { ...(state[productId] ?? NONE), ...patch } };
+  listeners.forEach((x) => x());
+  void setItem(KEY, JSON.stringify(state));
+}
+
+/** `base`: the tab the member is in ('/inhalte' or ''), so that a category opened from the introduction stays there. */
+export function openIntro(slug: string, base: string): void {
+  router.push({ pathname: '/einfuehrung', params: { slug, base } } as unknown as Href);
+}

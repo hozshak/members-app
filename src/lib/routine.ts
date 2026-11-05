@@ -32,8 +32,15 @@ export interface MemberRoutinePlan {
 }
 /** An N-day challenge of a routine (shared/types.ts RoutineChallenge); null = the routine is no challenge. */
 export interface RoutineChallenge { days: number; startDay: string | null; dayNumber: number | null; doneDays: number; completed: boolean }
+/** The check-in the coach switched on for a routine (shared/types.ts ProgressCheckConfig, lib/progress-check.ts). */
+export interface ProgressCheckQuestion { title: string; question: string }
+export interface ProgressCheckConfig {
+  contactName: string; photoTips: string[]; photoHint: string; looks: ProgressCheckQuestion[]; feels: ProgressCheckQuestion[]; encouragement: string; closing: string;
+}
 export interface MemberRoutine {
   id: Id; title: string; description: string; totalSec: number; steps: RoutineStep[]; stats: RoutineStats;
+  /** null = switched off; missing on software versions before the check-in. */
+  progressCheck?: ProgressCheckConfig | null;
   /** Missing on software versions before the challenges. */
   challenge?: RoutineChallenge | null;
   /** Missing on software versions before the plans. */
