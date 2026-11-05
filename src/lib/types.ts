@@ -14,7 +14,7 @@ export interface Bootstrap {
 /** GET /api/auth/me (subset). */
 export interface Me {
   id: Id; email: string; username: string | null; firstName: string; lastName: string; displayName: string;
-  role: 'owner' | 'admin' | 'editor' | 'support' | 'member'; memberNo: number; avatarUrl: string | null;
+  role: 'owner' | 'coowner' | 'admin' | 'staff' | 'member'; memberNo: number; avatarUrl: string | null;
   restricted: boolean; mustChangePassword: boolean; passwordMinLength: number; linkedAccount?: boolean;
 }
 /** POST /api/auth/login with `X-Client: members-app`. */

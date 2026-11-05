@@ -10,6 +10,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
+import { useSession } from '@/lib/session';
 import { stepSeconds, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
@@ -147,11 +148,12 @@ export function ExerciseThumb({ step, size = 48 }: { step: Pick<RoutineStep, 'ti
  */
 export function ZonesSection() {
   const p = usePalette();
+  const { me } = useSession();
   const q = useZones();
   const routines = useRoutines();
   const zones = q.data ?? [];
   if (zones.length === 0) return null;
-  const closedText = closedUntilRecommended(routines.data);
+  const closedText = closedUntilRecommended(routines.data, me?.role);
   const planOf = (zoneId: string) => routines.data?.find((r) => r.plan?.kind === 'zone' && r.plan.zoneId === zoneId);
   const line = (zoneId: string, exercises: number) => {
     const plan = planOf(zoneId);
@@ -171,7 +173,7 @@ export function ZonesSection() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s }}>
           {zones.map((z) => {
             const off = stillClosed(z.id);
-            const picture = z.exercises.find((x) => x.thumbnailUrl)?.thumbnailUrl ?? null;
+            const picture = z.imageUrl ?? z.exercises.find((x) => x.thumbnailUrl)?.thumbnailUrl ?? null;
             const onPicture = !!picture && !off;
             return (
               <Pressable

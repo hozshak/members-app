@@ -9,7 +9,8 @@ import { useApi } from './session';
 import type { Id } from './types';
 
 export interface MemberZoneExercise { videoId: Id; title: string; durationSec: number | null; thumbnailUrl: string | null }
-export interface MemberZone { id: Id; name: string; exercises: MemberZoneExercise[] }
+/** `imageUrl`: the picture the coach chose for the tile (migration 0112 of the software); not there or null: the thumbnail of the first exercise. */
+export interface MemberZone { id: Id; name: string; imageUrl?: string | null; exercises: MemberZoneExercise[] }
 
 export const PRACTICE_MINUTES = [3, 5, 10] as const;
 /** A video without a known length counts as this long. */

@@ -418,7 +418,7 @@ function PhotosCard() {
 export default function RoutineScreen() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const { community } = useSession();
+  const { community, me } = useSession();
   const q = useRoutines();
   const swaps = useSwaps();
   const main = mainRoutine(q.data);
@@ -434,7 +434,7 @@ export default function RoutineScreen() {
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
   const showWay = !!main && (planState(main) === 'running' || !main.plan || stats.totalDays > 0);
   // a zone plan already under way keeps its goal
-  const goalClosed = q.data.some((r) => r.plan?.kind === 'zone' && planState(r) === 'running') ? null : closedUntilRecommended(q.data);
+  const goalClosed = q.data.some((r) => r.plan?.kind === 'zone' && planState(r) === 'running') ? null : closedUntilRecommended(q.data, me?.role);
 
   return (
     <Screen tour="routine" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>

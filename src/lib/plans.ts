@@ -11,6 +11,7 @@ import {
 } from './routine';
 import { useApi } from './session';
 import { getItem, setItem } from './storage';
+import type { Me } from './types';
 
 export type PlanState = 'open' | 'running' | 'over';
 
@@ -56,9 +57,10 @@ export function waitingFor(list: readonly MemberRoutine[] | undefined, routine: 
 
 /**
  * "Gezielt üben" and "Mein Ziel" open once a recommended plan is finished (owner 04.11.2026): what to tell the member until then; null when they
- * are open, also when there is no recommended plan.
+ * are open, also when there is no recommended plan. The team always sees them open, so that it can try them out (owner 05.11.2026).
  */
-export function closedUntilRecommended(list: readonly MemberRoutine[] | undefined): string | null {
+export function closedUntilRecommended(list: readonly MemberRoutine[] | undefined, role: Me['role'] | undefined): string | null {
+  if (role && role !== 'member') return null;
   const recommended = (list ?? []).filter((r) => r.plan?.kind === 'recommended' && r.steps.length > 0);
   if (recommended.length === 0 || recommended.some((r) => planState(r) === 'over')) return null;
   const under = recommended.find((r) => planState(r) === 'running')?.challenge;
