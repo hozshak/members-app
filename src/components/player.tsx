@@ -62,6 +62,8 @@ export interface LessonPlayerProps {
   onFileFailed?: () => void;
   /** coach: a very small picture (no button, no text). */
   mini?: boolean;
+  /** coach: every new number starts the video from the beginning. */
+  restartSignal?: number;
 }
 
 /** After this long without data the waiting indicator also says why. */
@@ -83,7 +85,7 @@ function logVideo(what: string, detail?: string): void {
 }
 
 export function LessonPlayer({
-  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false,
+  playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false, restartSignal,
 }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
@@ -254,6 +256,11 @@ export function LessonPlayer({
     if (playing) player.play();
     else player.pause();
   }, [coach, loaded, playing, player]);
+
+  // coach: "Von vorne"
+  useEffect(() => {
+    if (coach && restartSignal) seek(player, 0);
+  }, [coach, player, restartSignal]);
 
   // a new token after renewAfterSec while playing (the old one would expire mid-video); a file needs none
   useEffect(() => {

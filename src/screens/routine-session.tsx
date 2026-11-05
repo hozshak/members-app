@@ -2,8 +2,10 @@
 // at every change (no voice, no extra sounds; the video always shows and has its sound: owner 04.11.2026), the screen stays on. What comes next is written below.
 // With the mirror on, mirror and video stand side by side in the same size (a landscape video above the mirror) and the countdown
 // sits on the seam; each picture can be enlarged (the other one becomes a small picture in the corner) and made small
-// again. An exercise with a video lasts as long as the video, which pauses with the countdown; it starts at once. A short video lies
-// on the phone once it has been loaded (lib/exercise-videos.ts) and then also lies ready behind the running one; every other one
+// again. The countdown of an exercise with a video lasts as long as the video, which pauses with it and starts at once. When it has played
+// through, nothing moves on (owner 05.11.2026, a short video would be over before anyone could follow it): the video starts again by itself for
+// as long as the member likes, and only "Fertig" at the bottom ends the exercise. Without a video, and in `practice`, the countdown goes on by
+// itself. A short video lies on the phone once it has been loaded (lib/exercise-videos.ts) and then also lies ready behind the running one; every other one
 // streams like a lesson, and while one streams nothing else loads. While a video waits for data the countdown waits too, at most
 // HOLD_MAX_MS, so a bad connection never blocks the routine. After the last exercise the day is marked done and a popup shows the streak
 // and a new frame of the profile; the success can be shared from there.
@@ -156,6 +158,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const [holdOver, setHoldOver] = useState(false);
   const [finished, setFinished] = useState<RoutineStats | null>(null);
   const [practiceDone, setPracticeDone] = useState(false);
+  // the video of this exercise has played through once
+  const [passDone, setPassDone] = useState(false);
+  const [restart, setRestart] = useState(0);
   // end time of the running countdown (set when it starts or resumes)
   const endsAt = useRef(0);
   const step = routine.steps[index];
@@ -165,6 +170,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   // (not under the start screen and the popup: the camera only runs when it is needed)
   const mirror = prefs.mirror && !!camPerm?.granted && Platform.OS !== 'web' && phase !== 'ready' && !over;
   const video = !!(step?.videoId && step.videoAvailable);
+  const waitsForFertig = video && !practice;
   const stepVideo = video ? (step?.videoId ?? null) : null;
   const videoIds = routine.steps.flatMap((s) => (s.videoId && s.videoAvailable ? [s.videoId] : []));
   // a video that streams needs the connection for itself: the loading rests
@@ -174,7 +180,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const streamNow = !!stepVideo && phase !== 'ready' && !stepFile;
   // the countdown waits while the video waits for data (at most HOLD_MAX_MS)
   const held = video && waiting && !holdOver;
-  const ticking = phase === 'run' && running && !held && !finished && !practiceDone;
+  const ticking = phase === 'run' && running && !held && !finished && !practiceDone && !passDone;
   const series = finished ? overallStats(routines.data) : null;
   const newFrame = series && frameOf(series).level > frameOf(statsBefore).level ? frameOf(series) : null;
   const card = useShareCard(series ? { big: String(series.streak), label: series.streak === 1 ? 'Tag in Folge' : 'Tage in Folge', line: routine.title } : null);
@@ -205,6 +211,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     endsAt.current = Date.now() + (durations[next] ?? s.durationSec) * 1000;
     setHoldOver(false);
     setWaiting(false);
+    setPassDone(false);
+    setRestart(0);
     buzz('step');
   };
 
@@ -225,6 +233,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     if (last) checks.mark(last.id);
     save();
   };
+
+  const forward = () => (index + 1 < routine.steps.length ? goTo(index + 1) : finish());
 
   const begin = () => {
     const list = routine.steps.map(stepSeconds);
@@ -259,8 +269,12 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
       setRemaining(left);
       if (left === 0) {
         clearInterval(t);
-        if (index + 1 < routine.steps.length) goTo(index + 1);
-        else finish();
+        if (waitsForFertig) {
+          setPassDone(true);
+          buzz('step');
+        } else {
+          forward();
+        }
       }
     }, 250);
     return () => clearInterval(t);
@@ -380,16 +394,23 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
 
   // ---------- one exercise ----------
   const dur = durations[index] ?? step.durationSec;
-  const share = dur > 0 ? remaining / dur : 0;
+  const share = passDone ? 1 : dur > 0 ? remaining / dur : 0;
   const status = phase === 'run' && !running ? 'Pausiert' : held ? 'Video lädt' : null;
-  const time = (big: boolean) => (
+  const fromTheStart = () => {
+    setRestart((n) => n + 1);
+    setRunning(true);
+    if (passDone) return;
+    setRemaining(dur);
+    endsAt.current = Date.now() + dur * 1000;
+  };
+  const time = (big: boolean) => (passDone ? <Ionicons name="checkmark" size={36} color={p.accent} accessibilityLabel="Video einmal durch" /> : (
     <View style={{ alignItems: 'center' }}>
       <Txt style={{ fontSize: big ? 56 : 24, lineHeight: big ? 64 : 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} accessibilityLabel={`noch ${remaining} Sekunden`}>
         {clock(remaining)}
       </Txt>
       {status ? <Txt variant="small" muted style={{ fontSize: big ? 14 : 10, lineHeight: big ? 18 : 12 }}>{status}</Txt> : null}
     </View>
-  );
+  ));
   /** The countdown as a small round badge (on the picture or on the seam between video and mirror). */
   const badge = (size: number, style: ViewStyle) => (
     <View style={[{ position: 'absolute', zIndex: 3, width: size, height: size, borderRadius: size / 2, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }, style]}>
@@ -430,6 +451,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
                   posterUrl={s.videoThumbnailUrl}
                   file={file}
                   onFileFailed={() => videos.drop(s.videoId ?? '')}
+                  restartSignal={active ? restart : undefined}
                   playPath={`/api/member/videos/${encodeURIComponent(s.videoId ?? '')}/play`}
                 />
               </View>
@@ -460,7 +482,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
         accessibilityElementsHidden={phase === 'ready'}
         importantForAccessibility={phase === 'ready' ? 'no-hide-descendants' : 'auto'}
       >
-      <Screen contentStyle={{ paddingTop: insets.top + space.m, gap: space.l }}>
+      <Screen contentStyle={{ paddingTop: insets.top + space.m, gap: space.l, ...(waitsForFertig ? { paddingBottom: 150 + insets.bottom } : {}) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.m }}>
           <Pressable accessibilityRole="button" accessibilityLabel={practice ? 'Übung beenden' : 'Routine beenden'} hitSlop={12} onPress={() => router.back()}>
             <Ionicons name="close" size={28} color={p.text} />
@@ -485,7 +507,9 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xl }}>
           <RoundButton icon="play-skip-back" label="Vorherige Übung" disabled={index === 0} onPress={() => goTo(index - 1)} />
           <RoundButton icon={running ? 'pause' : 'play'} label={running ? 'Pause' : 'Weiter'} big onPress={() => setRunning((v) => !v)} />
-          <RoundButton icon="play-skip-forward" label="Nächste Übung" onPress={() => (index + 1 < routine.steps.length ? goTo(index + 1) : finish())} />
+          {waitsForFertig
+            ? <RoundButton icon="repeat" label="Video von vorne" onPress={fromTheStart} />
+            : <RoundButton icon="play-skip-forward" label="Nächste Übung" onPress={forward} />}
         </View>
 
         {next ? (
@@ -500,6 +524,18 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
         {step.description ? <LinkedText text={step.description} /> : null}
       </Screen>
       </View>
+
+      {/* always in reach, also with the video enlarged */}
+      {waitsForFertig && phase === 'run' ? (
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, gap: space.s, paddingHorizontal: space.l, paddingTop: space.m, paddingBottom: insets.bottom + space.m, backgroundColor: p.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.line }}>
+          {passDone ? (
+            <View accessibilityLiveRegion="polite">
+              <Txt variant="small" muted style={{ textAlign: 'center' }}>Das Video läuft weiter, solange du magst.</Txt>
+            </View>
+          ) : null}
+          <Button label={next ? 'Fertig, nächste Übung' : 'Fertig'} kind={passDone ? 'primary' : 'secondary'} onPress={forward} />
+        </View>
+      ) : null}
 
       {startScreen}
 
