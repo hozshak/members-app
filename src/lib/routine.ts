@@ -1,7 +1,7 @@
 // The daily routine (app only): the routines of the community with the member's streak (GET /api/member/routines of
 // the software, worker/modules/player/routines.ts), marking a day done or opening it again, the daily reminder (local notifications
-// of the phone, another text every day, none on a day already done — no server involved) and the progress photos (stored ONLY on the
-// phone, in the app's own folder; never uploaded).
+// of the phone, another text every day, none on a day already done; only their texts come from the server, with the routines) and the progress
+// photos (stored ONLY on the phone, in the app's own folder; never uploaded).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
@@ -11,7 +11,7 @@ import { Platform } from 'react-native';
 import { useEffect, useSyncExternalStore } from 'react';
 import { ApiError } from './api';
 import { localDay } from './nav';
-import { PHOTO_REMINDER, plannedReminders } from './reminder-texts';
+import { DEFAULT_REMINDER_TEXTS, plannedReminders, readReminderTexts } from './reminder-texts';
 import { useApi } from './session';
 import { getItem, setItem } from './storage';
 import type { Id } from './types';
@@ -49,16 +49,41 @@ export interface MemberRoutine {
 
 export const routineKey = ['routines'] as const;
 
+/** The texts of the reminders as the coach set them; they come with the routines. Software versions before them send none: the app's own stay. */
+let textsNow = DEFAULT_REMINDER_TEXTS;
+const textsListeners = new Set<() => void>();
+
+function setReminderTexts(raw: unknown): void {
+  const next = readReminderTexts(raw) ?? DEFAULT_REMINDER_TEXTS;
+  if (JSON.stringify(next) === JSON.stringify(textsNow)) return;
+  textsNow = next;
+  textsListeners.forEach((l) => l());
+}
+
+function subscribeTexts(l: () => void): () => void {
+  textsListeners.add(l);
+  return () => { textsListeners.delete(l); };
+}
+
+export function useReminderTexts() {
+  return useSyncExternalStore(subscribeTexts, () => textsNow, () => textsNow);
+}
+
 export function useRoutines() {
   const api = useApi();
   return useQuery({
     queryKey: routineKey,
     queryFn: async () => {
       try {
-        return (await api.get<{ items: MemberRoutine[] }>(`/api/member/routines?day=${localDay()}`)).items;
+        const answer = await api.get<{ items: MemberRoutine[]; reminderTexts?: unknown }>(`/api/member/routines?day=${localDay()}`);
+        setReminderTexts(answer.reminderTexts);
+        return answer.items;
       } catch (err) {
         // a community whose software has no routines yet answers 404: nothing to show, no error
-        if (err instanceof ApiError && err.status === 404) return [];
+        if (err instanceof ApiError && err.status === 404) {
+          setReminderTexts(null);
+          return [];
+        }
         throw err;
       }
     },
@@ -228,7 +253,7 @@ async function planReminders(prefs: RoutinePrefs, routine: MemberRoutine | null)
       { identifier: 'snooze-60', buttonTitle: 'In 1 Stunde', options: { opensAppToForeground: true } },
       { identifier: 'snooze-180', buttonTitle: 'In 3 Stunden', options: { opensAppToForeground: true } },
     ]);
-    for (const r of plannedReminders(prefs, routine, DAILY_AHEAD)) {
+    for (const r of plannedReminders(prefs, routine, DAILY_AHEAD, textsNow)) {
       await Notifications.scheduleNotificationAsync({
         identifier: `${DAILY_PREFIX}-${r.day}`,
         content: { ...r.text, categoryIdentifier: REMINDER_CATEGORY },
@@ -239,7 +264,7 @@ async function planReminders(prefs: RoutinePrefs, routine: MemberRoutine | null)
   if (prefs.photoReminder) {
     await Notifications.scheduleNotificationAsync({
       identifier: PHOTO_ID,
-      content: PHOTO_REMINDER,
+      content: textsNow.photo,
       trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: prefs.photoWeekday, hour: prefs.photoHour, minute: prefs.photoMinute, channelId: CHANNEL },
     });
   }
@@ -250,7 +275,7 @@ export function syncReminders(prefs: RoutinePrefs, routine: MemberRoutine | null
   if (Platform.OS === 'web') return Promise.resolve();
   const state = JSON.stringify([
     localDay(), prefs.reminder, prefs.hour, prefs.minute, prefs.photoReminder, prefs.photoWeekday, prefs.photoHour, prefs.photoMinute,
-    routine?.title, routine?.stats.doneToday, routine?.stats.streak, routine?.challenge?.dayNumber, routine?.challenge?.days,
+    routine?.title, routine?.stats.doneToday, routine?.stats.streak, routine?.challenge?.dayNumber, routine?.challenge?.days, textsNow,
   ]);
   if (state === lastPlanned) return planning;
   lastPlanned = state;
