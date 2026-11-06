@@ -151,6 +151,26 @@ export function CheckInSuggestion({ routine }: { routine: MemberRoutine }) {
   return due ? <CheckInCard routine={routine} due={due} /> : null;
 }
 
+/** Next to the flame at the top of the Routine tab (owner 06.11.2026): the way to the check-ins; only where the coach offers them or there are some. */
+export function CheckInsButton({ routine }: { routine: MemberRoutine | null }) {
+  const p = usePalette();
+  const all = useCheckIns();
+  if (!routine?.progressCheck && all.length === 0) return null;
+  const open = () => router.push({ pathname: '/routine/check-ins', params: routine?.progressCheck ? { id: routine.id } : {} } as unknown as Href);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Deine Check-ins"
+      hitSlop={8}
+      onPress={open}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.m, paddingVertical: space.xs, borderRadius: 999, backgroundColor: p.accentSoft, opacity: pressed ? 0.7 : 1 })}
+    >
+      <Ionicons name="clipboard-outline" size={17} color={p.accent} />
+      <Txt variant="heading" color={p.accent}>Check-ins</Txt>
+    </Pressable>
+  );
+}
+
 /** The way to the check-ins done so far; only where the coach offers them or there are some. */
 export function CheckInsRow({ routine }: { routine: MemberRoutine | null }) {
   const p = usePalette();

@@ -126,6 +126,33 @@ export function useCheckDue(routine: MemberRoutine | null | undefined): CheckDue
   return checkDue(routine, mine, today);
 }
 
+/** Until when "Jetzt nicht" puts the suggestion of this routine off ('YYYY-MM-DD'), for the widget. */
+export function useCheckInSnooze(routineId: string | undefined): string | undefined {
+  return useSyncExternalStore(subscribe, () => (routineId ? read().snoozed[routineId] : undefined), () => undefined);
+}
+
+/**
+ * For the widget: due on `today`, or in how many days the next check-in comes (null: none in sight, e.g. no day done yet). Looks three weeks ahead. The routine
+ * is as loaded on `loadedOn`; for a later day the plan counts on by the calendar from there, and a day done is taken as given.
+ */
+export function checkInOutlook(
+  routine: MemberRoutine, mine: readonly SavedCheck[], snoozedUntil: string | undefined, today = localDay(), loadedOn = localDay(),
+): { due: CheckDue | null; inDays: number | null } {
+  if (!routine.progressCheck) return { due: null, inDays: null };
+  const ch = routine.challenge;
+  for (let k = 0; k <= 21; k++) {
+    const day = addDays(today, k);
+    if (snoozedUntil && day < snoozedUntil) continue;
+    const shift = daysBetween(loadedOn, day);
+    const ahead: MemberRoutine = shift <= 0 || !ch || ch.dayNumber === null
+      ? routine
+      : { ...routine, challenge: { ...ch, dayNumber: ch.dayNumber + shift, doneDays: Math.max(ch.doneDays, 1) } };
+    const due = checkDue(ahead, mine, day);
+    if (due) return k === 0 ? { due, inDays: 0 } : { due: null, inDays: k };
+  }
+  return { due: null, inDays: null };
+}
+
 export function snoozeCheckIn(routineId: string, due: CheckDue): void {
   const now = read();
   write({ ...now, snoozed: { ...now.snoozed, [routineId]: addDays(localDay(), SNOOZE_DAYS[due]) } });

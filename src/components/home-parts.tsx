@@ -1,43 +1,16 @@
-// The start page shows no course contents (owner 03.11.2026), those are under "Inhalte". It says something for today and
-// where the member stands: the quote of the day, and the progress in each programme and in the routine.
-import { Ionicons } from '@expo/vector-icons';
+// The start page shows no course contents (owner 03.11.2026), those are under "Inhalte". It shows where the member stands: the progress in
+// each programme and in the routine. The quote of the day and the own goal are gone (owner 06.11.2026).
 import { router, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AppState, View } from 'react-native';
+import { View } from 'react-native';
 import { plural } from '@/lib/format';
-import { goalProgress, useGoal } from '@/lib/goal';
-import { quoteOfDay } from '@/lib/motivation';
-import { localDay, useOpen } from '@/lib/nav';
+import { useOpen } from '@/lib/nav';
 import { mainRoutine, overallStats } from '@/lib/plans';
 import { useRoutines, type RoutineStats } from '@/lib/routine';
-import { radius, space, usePalette } from '@/lib/theme';
+import { space, usePalette } from '@/lib/theme';
 import type { CategoryCard, MemberProduct } from '@/lib/types';
 import { TwoWeeks } from './routine-parts';
 import { TourTarget } from './tour';
 import { Card, ProgressBar, Section, Txt } from './ui';
-
-export function DailyQuote() {
-  const p = usePalette();
-  const [day, setDay] = useState(() => localDay());
-  // a new day also when the app was only in the background overnight
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') setDay(localDay());
-    });
-    return () => sub.remove();
-  }, []);
-  const quote = quoteOfDay(day);
-  return (
-    <View style={{ gap: space.s, padding: space.l, borderRadius: radius.l, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-        <Ionicons name="sparkles" size={16} color={p.accent} />
-        <Txt variant="caption" color={p.accent}>Zitat des Tages</Txt>
-      </View>
-      <Txt variant="title">{`„${quote.text}“`}</Txt>
-      <Txt variant="small" muted>{quote.by}</Txt>
-    </View>
-  );
-}
 
 /** One programme: how much is done and which part the member is in. */
 function ProgressRow({ title, done, total, line, onPress }: { title: string; done: number; total: number; line: string | null; onPress: () => void }) {
@@ -94,17 +67,13 @@ function Figure({ value, label }: { value: string; label: string }) {
 }
 
 function RoutineProgress({ stats }: { stats: RoutineStats }) {
-  const [goal] = useGoal();
-  const reached = goal ? goalProgress(goal, stats) : null;
   return (
     <Card onPress={() => router.navigate('/routine' as Href)} accessibilityLabel="Deine Routine" style={{ padding: space.l, gap: space.m }}>
       <View style={{ flexDirection: 'row', gap: space.m }}>
         <Figure value={String(stats.streak)} label={stats.streak === 1 ? 'Tag in Folge' : 'Tage in Folge'} />
         <Figure value={String(stats.totalDays)} label={stats.totalDays === 1 ? 'Tag insgesamt' : 'Tage insgesamt'} />
-        {reached ? <Figure value={`${Math.round(reached.share * 100)} %`} label="deines Ziels" /> : null}
       </View>
       <TwoWeeks days={stats.days} />
-      {goal && reached ? <Txt variant="small" muted numberOfLines={2}>{goal.text}: {reached.done} von {reached.target} Tagen</Txt> : null}
     </Card>
   );
 }

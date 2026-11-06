@@ -1,28 +1,28 @@
 // Routine overview, with one main action and the most important first: today on a large picture with the way in; where the member stands (the
 // plan with its 14 days, a tap leads to the whole plan; without a plan the last 14 days); a small hint that recommends the reminder while it is
-// off; the exercises to tick off (all ticked = day done, a tap on one takes its tick back and opens the day again); the progress photos
-// (optionally behind Face ID); the member's own goal; "Gezielt üben" (plans and short sessions by zone); a challenge when the coach made the
-// routine one ("Tag 12 von 30"). A tap on the flame says what it counts. The settings of the reminders are under "Profil". When the coach offers a check-in
-// (lib/progress-check.ts) the app suggests it below the plan when it is due, and "Deine Check-ins" leads to the ones done so far.
+// off; today's exercises with their ticks (set by the routine itself, never by hand, owner 06.11.2026; "Zurücksetzen und neu beginnen" of the plan takes
+// them away); the progress photos (optionally behind Face ID); a challenge when the coach made the routine one ("Tag 12 von 30"). A tap on the flame says
+// what it counts. The settings of the reminders are under "Profil". When the coach offers a check-in (lib/progress-check.ts) the app suggests it below
+// the plan when it is due, and the button "Check-ins" next to the flame leads to the ones done so far.
+// "Gezielt üben" and the own goal are out of the app (owner 06.11.2026); their screens (routine/zone.tsx, routine/ziel.tsx) are no longer linked.
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckInsRow, CheckInSuggestion } from '@/components/check-in-parts';
+import { CheckInsButton, CheckInSuggestion } from '@/components/check-in-parts';
 import { ReminderPopup } from '@/components/reminder-popup';
-import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openPlan, openRoutine, routineSeconds, TwoWeeks, ZonesSection } from '@/components/routine-parts';
+import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openPlan, openRoutine, routineSeconds, TwoWeeks } from '@/components/routine-parts';
 import { TourTarget } from '@/components/tour';
 import { Button, Card, ErrorView, Loading, MenuGroup, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
-import { goalProgress, useDayChecks, useGoal } from '@/lib/goal';
+import { useDayChecks } from '@/lib/goal';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
-import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, waitingFor, withSwaps } from '@/lib/plans';
+import { goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, waitingFor, withSwaps } from '@/lib/plans';
 import {
-  allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useCheckIn, useRoutinePrefs, useRoutines,
+  allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useRoutinePrefs, useRoutines,
   type MemberRoutine, type ProgressPhoto, type RoutineStats,
 } from '@/lib/routine';
 import { useSession } from '@/lib/session';
@@ -111,83 +111,15 @@ function StreakPopup({ stats, onClose }: { stats: RoutineStats; onClose: () => v
 }
 
 /**
- * "Mein Ziel": the goal in the member's words, a bar and a sentence on how close it is. Grey and closed until the recommended plan is finished
- * (`closedText`, owner 04.11.2026).
+ * Today's exercises with their ticks. Only the routine sets them, exercise by exercise, and "Zurücksetzen und neu beginnen" of the plan takes them away; a
+ * tap does nothing (owner 06.11.2026: not by hand).
  */
-function GoalCard({ stats, closedText }: { stats: RoutineStats; closedText: string | null }) {
-  const p = usePalette();
-  const [goal] = useGoal();
-  const edit = () => router.push('/routine/ziel' as Href);
-  if (closedText) {
-    return (
-      <Card
-        onPress={() => Alert.alert('Noch gesperrt', closedText)}
-        accessibilityLabel={`Mein Ziel, noch gesperrt. ${closedText}`}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, backgroundColor: p.surfaceAlt, borderColor: 'transparent' }}
-      >
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.surface, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="lock-closed" size={20} color={p.textMuted} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Txt variant="heading" color={p.textMuted}>Mein Ziel</Txt>
-          <Txt variant="small" muted>{closedText}</Txt>
-        </View>
-      </Card>
-    );
-  }
-  if (!goal) {
-    return (
-      <Card onPress={edit} accessibilityLabel="Ziel festlegen" style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="flag" size={22} color={p.accent} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Txt variant="heading">Eigenes Ziel festlegen</Txt>
-          <Txt variant="small" muted>Was willst du erreichen? Du siehst genau, wie weit du bist.</Txt>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
-      </Card>
-    );
-  }
-  const g = goalProgress(goal, stats);
-  return (
-    <Card onPress={edit} accessibilityLabel={`Mein Ziel: ${goal.text}, bearbeiten`} style={{ padding: space.l, gap: space.s }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
-        <Ionicons name={g.reached ? 'trophy' : 'flag'} size={16} color={p.accent} />
-        <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>Mein Ziel</Txt>
-        <Txt variant="small" style={{ fontWeight: '700' }} color={p.accent}>{Math.round(g.share * 100)} %</Txt>
-        <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
-      </View>
-      <Txt variant="heading">{goal.text}</Txt>
-      <ProgressBar value={g.share} style={{ height: 8, borderRadius: 4 }} />
-      <Txt variant="small" color={g.reached ? p.success : p.textMuted}>{g.message}</Txt>
-    </Card>
-  );
-}
-
-/** Today's exercises to tick off; all ticked = the day is done. A tap on a ticked one takes the tick back and opens the day again. */
 function TodayChecklist({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const checks = useDayChecks(routine.id);
-  const checkIn = useCheckIn(routine.id);
   const doneToday = routine.stats.doneToday;
   const total = routine.steps.length;
   const ticked = routine.steps.filter((s) => doneToday || checks.isDone(s.id)).length;
-
-  const toggle = (stepId: string) => {
-    if (Platform.OS !== 'web') void Haptics.selectionAsync();
-    if (doneToday) {
-      // the day was done: this exercise opens, the others stay ticked
-      checks.set(routine.steps.filter((s) => s.id !== stepId).map((s) => s.id));
-      checkIn.mutate(false);
-      return;
-    }
-    const willBe = new Set(checks.done);
-    if (willBe.has(stepId)) willBe.delete(stepId);
-    else willBe.add(stepId);
-    checks.toggle(stepId);
-    if (routine.steps.every((s) => willBe.has(s.id)) && !checkIn.isPending) checkIn.mutate(true);
-  };
 
   return (
     <Section
@@ -200,13 +132,11 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
         {routine.steps.map((s) => {
           const on = doneToday || checks.isDone(s.id);
           return (
-            <Pressable
+            <View
               key={s.id}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={s.title}
-              onPress={() => toggle(s.id)}
-              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, minHeight: 72, backgroundColor: pressed ? p.surfaceAlt : p.surface })}
+              accessible
+              accessibilityLabel={`${s.title}, ${on ? 'erledigt' : 'noch offen'}`}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, minHeight: 72, backgroundColor: p.surface }}
             >
               <View style={{ opacity: on ? 0.55 : 1 }}>
                 <ExerciseThumb step={s} size={56} />
@@ -218,11 +148,11 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
               <View style={{ width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                 {on ? <Ionicons name="checkmark" size={18} color={p.onAccent} /> : null}
               </View>
-            </Pressable>
+            </View>
           );
         })}
       </MenuGroup>
-      {checkIn.isError ? <Txt variant="small" color={p.danger}>{errorText(checkIn.error)}</Txt> : null}
+      {ticked < total ? <Txt variant="small" muted>Die Haken setzt die App, während du die Routine machst.</Txt> : null}
     </Section>
   );
 }
@@ -418,7 +348,7 @@ function PhotosCard() {
 export default function RoutineScreen() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const { community, me } = useSession();
+  const { community } = useSession();
   const q = useRoutines();
   const swaps = useSwaps();
   const main = mainRoutine(q.data);
@@ -433,13 +363,13 @@ export default function RoutineScreen() {
   const today = main ? withSwaps(main, swaps.steps) : null;
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
   const showWay = !!main && (planState(main) === 'running' || !main.plan || stats.totalDays > 0);
-  // a zone plan already under way keeps its goal
-  const goalClosed = q.data.some((r) => r.plan?.kind === 'zone' && planState(r) === 'running') ? null : closedUntilRecommended(q.data, me?.role);
 
   return (
     <Screen tour="routine" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
-        <Txt variant="display">Routine</Txt>
+        <Txt variant="display" style={{ flexShrink: 1 }}>Routine</Txt>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
+        <TourTarget id="routine.checkins"><CheckInsButton routine={main} /></TourTarget>
         {stats.streak > 0 ? (
           <Pressable
             accessibilityRole="button"
@@ -453,6 +383,7 @@ export default function RoutineScreen() {
             <Txt variant="heading" color={p.accent} style={{ fontVariant: ['tabular-nums'] }}>{stats.streak}</Txt>
           </Pressable>
         ) : null}
+        </View>
       </View>
       {flameOpen ? <StreakPopup stats={stats} onClose={() => setFlameOpen(false)} /> : null}
 
@@ -464,21 +395,16 @@ export default function RoutineScreen() {
             <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier, mit Timer und Erinnerung.</Txt>
           </Card>
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
-          <CheckInsRow routine={null} />
-          <ZonesSection />
         </>
       ) : (
         <>
           <TodayHero routine={today} />
           {showWay ? <WayCard routine={main} days={stats.days} /> : null}
           <CheckInSuggestion routine={main} />
-          <ReminderHint routine={main} />
+          {main.plan && planState(main) === 'over' ? null : <ReminderHint routine={main} />}
           {plans.map((r) => <PlanCard key={r.id} routine={r} waiting={waitingFor(q.data, r)} />)}
           {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
-          <CheckInsRow routine={main} />
-          <TourTarget id="routine.goal"><GoalCard stats={stats} closedText={goalClosed} /></TourTarget>
-          <ZonesSection />
           {main.plan ? null : <ChallengeBlock routine={main} />}
         </>
       )}

@@ -1,12 +1,13 @@
-// Home: greeting with the buttons of the start page next to it (e.g. "WhatsApp-Gruppe", "Bewertung abgeben"), the quote of the day,
-// today's routine (one tap to its start) and where the member stands in the programmes and the routine. The contents themselves
+// Home: greeting with the buttons of the start page next to it (e.g. "WhatsApp-Gruppe", "Bewertung abgeben"), "So startest du" with the
+// introduction of each programme (always there; the quote of the day is gone, owner 06.11.2026), today's routine (one tap to its start) and where the
+// member stands in the programmes and the routine. The contents themselves
 // are under "Inhalte". After a month the popup that asks for a rating; the first time the assistant (lib/tour.ts).
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeButtons, RatingPrompt } from '@/components/home-buttons';
-import { DailyQuote, ProgressOverview } from '@/components/home-parts';
-import { IntroHints } from '@/components/intro-card';
+import { ProgressOverview } from '@/components/home-parts';
+import { IntroStart } from '@/components/intro-card';
 import { RoutineTodayCard } from '@/components/routine-parts';
 import { TourTarget } from '@/components/tour';
 import { ErrorView, Loading, Screen, Txt } from '@/components/ui';
@@ -44,9 +45,7 @@ export default function HomeScreen() {
       {h.buttons && h.buttons.length > 0 ? <TourTarget id="start.buttons"><HomeButtons buttons={h.buttons} /></TourTarget> : null}
       </View>
 
-      <IntroHints products={h.products} />
-
-      <TourTarget id="start.quote"><DailyQuote /></TourTarget>
+      <TourTarget id="start.intro"><IntroStart products={h.products} /></TourTarget>
 
       <RoutineTodayCard />
 

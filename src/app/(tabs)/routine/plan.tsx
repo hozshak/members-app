@@ -13,12 +13,12 @@ import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openRoutine, PhotoSlot }
 import { Button, Card, Cover, ErrorView, Loading, MenuGroup, MenuRow, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
-import { useGoal } from '@/lib/goal';
+import { useDayChecks, useGoal } from '@/lib/goal';
 import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { clearPlanPhotos, goalLabel, planLabel, planState, usePlanPhotos, usePlanStart, useSwaps, withSwaps } from '@/lib/plans';
 import { openCheckIn, useCheckDue } from '@/lib/progress-check';
-import { listPhotos, stepSeconds, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
+import { listPhotos, stepSeconds, useCheckIn, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
 import { useZones, type MemberZoneExercise } from '@/lib/zones';
 
@@ -201,6 +201,8 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   const zones = useZones();
   const [, setGoal] = useGoal();
   const due = useCheckDue(routine);
+  const dayChecks = useDayChecks(routine.id);
+  const undoToday = useCheckIn(routine.id);
   const [prefs] = useRoutinePrefs();
   const photosVisible = usePhotosVisible(prefs.photoLock);
   const info = routine.plan;
@@ -238,10 +240,19 @@ function Plan({ routine }: { routine: MemberRoutine }) {
       if (Platform.OS !== 'web') camera(routine.id, 'start');
     },
   });
+  // the reset is the one way to take today's ticks back (owner 06.11.2026): today is day 1 again and open
   const restart = () => Alert.alert(
     'Von vorne beginnen?',
-    'Heute ist dann wieder Tag 1. Deine erledigten Tage bleiben erhalten.',
-    [{ text: 'Abbrechen', style: 'cancel' }, { text: 'Neu starten', style: 'destructive', onPress: startAgain }],
+    'Heute ist dann wieder Tag 1 und noch offen. Deine erledigten Tage davor bleiben erhalten.',
+    [{ text: 'Abbrechen', style: 'cancel' }, {
+      text: 'Neu starten',
+      style: 'destructive',
+      onPress: () => {
+        dayChecks.set([]);
+        if (routine.stats.doneToday) undoToday.mutate(false);
+        startAgain();
+      },
+    }],
   );
   const leave = () => Alert.alert(
     'Routine beenden?',

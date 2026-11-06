@@ -19,3 +19,18 @@ export interface RoutineWidgetProps {
   accent: string;
   onAccent: string;
 }
+
+/** What the check-in widget shows (owner 06.11.2026); the app sends it (lib/widget.ts), computed from lib/progress-check.ts. */
+export interface CheckInWidgetProps {
+  /** none: logged out, or the coach offers no check-in; wait: none in sight yet (no day done); soon: the next comes in `inDays` days; week / final: today. */
+  state: 'none' | 'wait' | 'soon' | 'week' | 'final';
+  inDays: number;
+  /** Check-ins kept on this phone. */
+  count: number;
+  /** The routine of the check-in, for the link of a tap. */
+  routineId: string;
+  /** The community's accent, a deeper shade of it, and the readable colour on top. */
+  accent: string;
+  accentDeep: string;
+  onAccent: string;
+}

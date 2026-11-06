@@ -22,7 +22,7 @@ const STEPS: Record<TourId, TourStep[]> = {
   start: [
     { title: 'Willkommen bei {name}', text: 'Schön, dass du da bist! Ich zeige dir kurz, was wo ist. Die anderen Bereiche erkläre ich dir, sobald du sie zum ersten Mal öffnest.' },
     { target: 'start.buttons', title: 'WhatsApp und Bewertung', text: 'Hier oben kommst du in die WhatsApp-Gruppe. Mit dem goldenen Stern gibst du eine Bewertung ab.' },
-    { target: 'start.quote', title: 'Zitat des Tages', text: 'Jeden Tag ein neues Zitat für dich.' },
+    { target: 'start.intro', title: 'So startest du', text: 'Für jedes Programm steht hier, womit du anfängst. Tippe drauf, dann öffnet sich die Einführung.' },
     { target: 'start.routine', title: 'Deine Routine heute', text: 'Ein Fingertipp, und du bist bei deinen Übungen für heute.' },
     { target: 'start.progress', title: 'Dein Fortschritt', text: 'So weit bist du in deinen Programmen und in der Routine. Tippe drauf, und du bist direkt dort.' },
     { tab: 1, title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
@@ -42,10 +42,9 @@ const STEPS: Record<TourId, TourStep[]> = {
     { target: 'routine.hero', title: 'Deine Routine heute', text: 'Hier startest du deine Übungen von heute. Die Videos zeigen dir, wie es geht.' },
     { target: 'routine.days', title: 'Deine letzten 14 Tage', text: 'Jeder Tag, an dem du deine Routine gemacht hast, bekommt einen Haken.' },
     { target: 'routine.reminder', title: 'Erinnerung', text: 'Die Erinnerung ist noch aus. Wir empfehlen sie dir, dann bleibst du leichter dran.' },
-    { target: 'routine.check', title: 'Heute abhaken', text: 'Hake deine Übungen einzeln ab. Hast du dich vertippt, nimmst du den Haken einfach wieder raus.' },
+    { target: 'routine.check', title: 'Heute abhaken', text: 'Hier siehst du, welche Übungen du heute schon gemacht hast. Die Haken setzt die App, während du die Routine machst.' },
     { target: 'routine.photos', title: 'Fortschrittsfotos', text: 'So siehst du, was sich verändert. Die Fotos bleiben nur auf deinem Handy.' },
-    { target: 'routine.goal', title: 'Mein Ziel', text: 'Hier setzt du dir später ein eigenes Ziel. Der Balken zeigt dir, wie nah du ihm schon bist.' },
-    { target: 'routine.zones', title: 'Gezielt üben', text: 'Einzelne Bereiche wie Stirn, Kinn oder Hals. Das wird frei, sobald du deine empfohlene Routine geschafft hast.' },
+    { target: 'routine.checkins', title: 'Deine Check-ins', text: 'Hier oben findest du deine Check-ins: Fotos vergleichen und kurz in dich hineinhören.' },
   ],
   profil: [
     { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Profil“. Ich führe dich einmal rum.' },

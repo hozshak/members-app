@@ -124,7 +124,9 @@ export function useReminderSync(): void {
   const q = useRoutines();
   const [prefs] = useRoutinePrefs();
   const texts = useReminderTexts();
-  const main = mainRoutine(q.data);
+  const found = mainRoutine(q.data);
+  // a plan that is over has nothing for today: "Deine Routine ist bereit" would be wrong
+  const main = found && found.plan && planState(found) === 'over' ? null : found;
   const loaded = q.data !== undefined;
   useEffect(() => {
     if (loaded && routinePrefsLoaded()) void syncReminders(prefs, main);

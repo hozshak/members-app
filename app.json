@@ -106,6 +106,27 @@
                 "minHeight": 110,
                 "initialLayout": "src/widgets/routine-widget.android.tsx"
               }
+            },
+            {
+              "name": "CheckInWidget",
+              "displayName": "Check-in",
+              "description": "Wann dein nächster Check-in kommt.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "accessoryRectangular",
+                  "accessoryInline"
+                ],
+                "initialLayout": "src/widgets/check-in-widget.ios.tsx"
+              },
+              "android": {
+                "targetCellWidth": 2,
+                "targetCellHeight": 2,
+                "minWidth": 110,
+                "minHeight": 110,
+                "initialLayout": "src/widgets/check-in-widget.android.tsx"
+              }
             }
           ]
         }

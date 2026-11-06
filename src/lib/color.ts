@@ -9,3 +9,9 @@ export function onColor(hex: string): string {
   const l = luminance(hex);
   return (1.05) / (l + 0.05) >= (l + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
 }
+
+/** `hex` mixed with black (0 … 1), for the darker end of a gradient. */
+export function deeper(hex: string, amount = 0.35): string {
+  const ch = [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - amount)));
+  return `#${ch.map((v) => (Number.isFinite(v) ? v : 0).toString(16).padStart(2, '0')).join('')}`;
+}

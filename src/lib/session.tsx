@@ -7,7 +7,7 @@ import { ApiError, createApi, normalizeBaseUrl, type ApiClient } from './api';
 import { clearExerciseVideos } from './exercise-videos';
 import { getItem, removeItem, setItem } from './storage';
 import type { Bootstrap, LoginResponse, Me } from './types';
-import { clearRoutineWidget } from './widget';
+import { clearCheckInWidget, clearRoutineWidget } from './widget';
 
 export interface Community {
   url: string;
@@ -60,6 +60,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMe(null);
     qc.clear();
     clearRoutineWidget();
+    clearCheckInWidget();
     clearExerciseVideos();
     await removeItem(TOKEN_KEY);
   }, [qc, tokens]);

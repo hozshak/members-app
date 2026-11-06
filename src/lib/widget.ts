@@ -5,9 +5,10 @@
 // midnight, the streak lost when a day stayed open. Android has no timelines and shows what the app last sent.
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
-import type { RoutineWidgetProps } from '@/widgets/props';
+import type { CheckInWidgetProps, RoutineWidgetProps } from '@/widgets/props';
 import { localDay } from './nav';
-import { onColor } from './color';
+import { deeper, onColor } from './color';
+import type { CheckDue } from './progress-check';
 
 interface WidgetHandle {
   updateSnapshot(props: RoutineWidgetProps): void;
@@ -92,5 +93,57 @@ export function clearRoutineWidget(accent = '#BD9553'): void {
       hasRoutine: false, title: '', streak: 0, doneToday: false, minutes: 0, week: [false, false, false, false, false, false, false], todayIndex: 0, atRisk: false, hoursLeft: 0,
       accent, onAccent: onColor(accent),
     });
+  } catch { /* the app works without the widget */ }
+}
+
+// ---------- the check-in widget (owner 06.11.2026) ----------
+
+interface CheckInHandle {
+  updateSnapshot(props: CheckInWidgetProps): void;
+  updateTimeline(entries: { date: Date; props: CheckInWidgetProps }[]): void;
+}
+let checkInHandle: CheckInHandle | null | undefined;
+
+function checkInWidget(): CheckInHandle | null {
+  if (!available) return null;
+  if (checkInHandle === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- must not load in Expo Go: the native module is missing there
+      checkInHandle = (require('@/widgets/check-in-widget') as { default: CheckInHandle }).default;
+    } catch {
+      checkInHandle = null;
+    }
+  }
+  return checkInHandle;
+}
+
+export type CheckInBase = Omit<CheckInWidgetProps, 'state' | 'inDays' | 'accentDeep' | 'onAccent'>;
+
+/** What the check-in widget shows from now on: now and at each of the next 7 midnights, so that the days count down and the day itself invites with the app closed. */
+export function checkInTimeline(
+  outlook: (day: string) => { due: CheckDue | null; inDays: number | null }, base: CheckInBase, now = new Date(),
+): { date: Date; props: CheckInWidgetProps }[] {
+  const colours = { accentDeep: deeper(base.accent), onAccent: onColor(base.accent) };
+  return Array.from({ length: 8 }, (_, k) => {
+    const date = k === 0 ? now : new Date(now.getFullYear(), now.getMonth(), now.getDate() + k, 0, 0, 5);
+    const o = outlook(localDay(date));
+    const state: CheckInWidgetProps['state'] = o.due ?? (o.inDays === null ? 'wait' : 'soon');
+    return { date, props: { ...base, ...colours, state, inDays: o.inDays ?? 0 } };
+  });
+}
+
+export function sendCheckInToWidget(entries: { date: Date; props: CheckInWidgetProps }[]): void {
+  const w = checkInWidget();
+  if (!w) return;
+  try {
+    w.updateTimeline(entries);
+    if (Platform.OS === 'android' && entries[0]) w.updateSnapshot(entries[0].props);
+  } catch { /* the app works without the widget */ }
+}
+
+/** Logged out, or no check-in offered: no personal data any more. */
+export function clearCheckInWidget(accent = '#BD9553'): void {
+  try {
+    checkInWidget()?.updateSnapshot({ state: 'none', inDays: 0, count: 0, routineId: '', accent, accentDeep: deeper(accent), onAccent: onColor(accent) });
   } catch { /* the app works without the widget */ }
 }
