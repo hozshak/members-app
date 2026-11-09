@@ -118,8 +118,10 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
   const p = usePalette();
   const checks = useDayChecks(routine.id);
   const doneToday = routine.stats.doneToday;
-  const total = routine.steps.length;
-  const ticked = routine.steps.filter((s) => doneToday || checks.isDone(s.id)).length;
+  // the optional exercises (migration 0114) are not counted: the day is done without them
+  const must = routine.steps.filter((s) => !s.optional);
+  const total = must.length;
+  const ticked = must.filter((s) => doneToday || checks.isDone(s.id)).length;
 
   return (
     <Section
@@ -130,7 +132,7 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
     >
       <MenuGroup>
         {routine.steps.map((s) => {
-          const on = doneToday || checks.isDone(s.id);
+          const on = (doneToday && !s.optional) || checks.isDone(s.id);
           return (
             <View
               key={s.id}
@@ -143,7 +145,7 @@ function TodayChecklist({ routine }: { routine: MemberRoutine }) {
               </View>
               <View style={{ flex: 1, gap: 2 }}>
                 <Txt variant="heading" numberOfLines={2} color={on ? p.textMuted : p.text}>{s.title}</Txt>
-                <Txt variant="small" muted>{clock(stepSeconds(s))}</Txt>
+                <Txt variant="small" muted>{clock(stepSeconds(s))}{s.optional ? ' · freiwillig' : ''}</Txt>
               </View>
               <View style={{ width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: on ? p.accent : p.line, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                 {on ? <Ionicons name="checkmark" size={18} color={p.onAccent} /> : null}

@@ -16,7 +16,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, type Href } from 'expo-router';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FrameRing } from '@/components/frame-ring';
@@ -166,16 +166,30 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const [restart, setRestart] = useState(0);
   // end time of the running countdown (set when it starts or resumes)
   const endsAt = useRef(0);
-  const step = routine.steps[index];
-  const next = routine.steps[index + 1];
+  // the mandatory exercises first, the optional ones after them (migration 0114 of the software): the day counts as done after the mandatory ones, and the
+  // popup then offers the optional ones ("Zusatz-Übung")
+  const steps = useMemo(() => {
+    const must = routine.steps.filter((s) => !s.optional);
+    return practice || must.length === 0 ? routine.steps : [...must, ...routine.steps.filter((s) => s.optional)];
+  }, [routine.steps, practice]);
+  const mustCount = practice ? steps.length : (steps.filter((s) => !s.optional).length || steps.length);
+  const hasExtra = mustCount < steps.length;
+  const [extra, setExtra] = useState(false);
+  const [extraDone, setExtraDone] = useState(false);
+  const partStart = extra ? mustCount : 0;
+  const partEnd = extra ? steps.length : mustCount;
+  const step = steps[index];
+  const next = index + 1 < partEnd ? steps[index + 1] : undefined;
+  // the video after this one lies ready, also the first optional one
+  const preload = steps[index + 1];
   // the run is over: the popup shows, also while the day is being saved or could not be saved
-  const over = !!finished || practiceDone || checkIn.isPending || checkIn.isError;
+  const over = (!!finished && !extra) || practiceDone || checkIn.isPending || checkIn.isError;
   // (not under the start screen and the popup: the camera only runs when it is needed)
   const mirror = prefs.mirror && !!camPerm?.granted && Platform.OS !== 'web' && phase !== 'ready' && !over;
   const video = !!(step?.videoId && step.videoAvailable);
   const waitsForFertig = video && !practice;
   const stepVideo = video ? (step?.videoId ?? null) : null;
-  const videoIds = routine.steps.flatMap((s) => (s.videoId && s.videoAvailable ? [s.videoId] : []));
+  const videoIds = steps.flatMap((s) => (s.videoId && s.videoAvailable ? [s.videoId] : []));
   // a video that streams needs the connection for itself: the loading rests
   const streaming = useRef(false);
   const videos = useExerciseVideos(api, videoIds, stepVideo, streaming);
@@ -183,7 +197,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const streamNow = !!stepVideo && phase !== 'ready' && !stepFile;
   // the countdown waits while the video waits for data (at most HOLD_MAX_MS)
   const held = video && waiting && !holdOver;
-  const ticking = phase === 'run' && running && !held && !finished && !practiceDone && !passDone;
+  const ticking = phase === 'run' && running && !held && (!finished || extra) && !practiceDone && !passDone;
   const series = finished ? overallStats(routines.data) : null;
   const newFrame = series && frameOf(series).level > frameOf(statsBefore).level ? frameOf(series) : null;
   const card = useShareCard(series ? { big: String(series.streak), label: series.streak === 1 ? 'Tag in Folge' : 'Tage in Folge', line: routine.title } : null);
@@ -204,10 +218,10 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   }, [waiting]);
 
   const goTo = (next: number) => {
-    const s = routine.steps[next];
+    const s = steps[next];
     if (!s) return;
     // moving on ticks the exercise just finished (the checklist of the overview)
-    const current = routine.steps[index];
+    const current = steps[index];
     if (next > index && current && !practice) checks.mark(current.id);
     setIndex(next);
     setRemaining(durations[next] ?? s.durationSec);
@@ -232,15 +246,32 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
       setPracticeDone(true);
       return;
     }
-    const last = routine.steps[routine.steps.length - 1];
-    if (last) checks.mark(last.id);
+    const current = steps[index];
+    if (current) checks.mark(current.id);
     save();
   };
 
-  const forward = () => (index + 1 < routine.steps.length ? goTo(index + 1) : finish());
+  /** The optional exercises are done too: back to the popup. */
+  const finishExtra = () => {
+    setRunning(false);
+    buzz('done');
+    const current = steps[index];
+    if (current) checks.mark(current.id);
+    setExtra(false);
+    setExtraDone(true);
+  };
+
+  /** From the popup: on with the optional exercises. */
+  const startExtra = () => {
+    setExtra(true);
+    goTo(mustCount);
+    setRunning(true);
+  };
+
+  const forward = () => (index + 1 < partEnd ? goTo(index + 1) : extra ? finishExtra() : finish());
 
   const begin = () => {
-    const list = routine.steps.map(stepSeconds);
+    const list = steps.map(stepSeconds);
     setDurations(list);
     setRemaining(list[0] ?? 0);
     setCount(3);
@@ -309,7 +340,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           <View style={{ gap: space.xs }}>
             <Txt variant="caption" color={p.accent}>{practice ? 'Gezielt üben' : 'Deine Routine heute'}</Txt>
             <Txt variant="display">{routine.title}</Txt>
-            <Txt muted>{plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(practice ? routine.totalSec : routineSeconds(routine))}</Txt>
+            <Txt muted>{plural(mustCount, 'Übung', 'Übungen')} · {minutes(practice ? routine.totalSec : routineSeconds(routine))}{hasExtra ? ` · ${steps.length - mustCount} freiwillig` : ''}</Txt>
             {routine.description ? <LinkedText text={routine.description} muted style={{ marginTop: space.xs }} /> : null}
           </View>
 
@@ -333,10 +364,13 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           <View style={{ gap: space.s }}>
             <Txt variant="heading">Das erwartet dich</Txt>
             <View style={{ borderRadius: radius.l, backgroundColor: p.surface, overflow: 'hidden' }}>
-              {routine.steps.map((s, i) => (
+              {steps.map((s, i) => (
                 <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth, borderTopColor: p.line }}>
                   <ExerciseThumb step={s} />
-                  <Txt style={{ flex: 1 }} numberOfLines={2}>{s.title}</Txt>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Txt numberOfLines={2}>{s.title}</Txt>
+                    {s.optional && !practice ? <Txt variant="small" color={p.accent}>Freiwillig, nach der Routine</Txt> : null}
+                  </View>
                   <Txt variant="small" muted style={{ fontVariant: ['tabular-nums'] }}>{clock(stepSeconds(s))}</Txt>
                 </View>
               ))}
@@ -387,6 +421,13 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
               <Txt muted style={{ textAlign: 'center' }}>{fillAppText(appTexts.doneBody, { routine: routine.title })}</Txt>
             </>
           )}
+          {finished && hasExtra && !extraDone ? (
+            <View style={{ alignSelf: 'stretch', gap: space.xs }}>
+              <Button label={steps.length - mustCount === 1 ? 'Zusatz-Übung machen' : 'Zusatz-Übungen machen'} kind="secondary" onPress={startExtra} />
+              <Txt variant="small" muted style={{ textAlign: 'center' }}>Freiwillig: {steps.slice(mustCount).map((s) => s.title).join(', ')}</Txt>
+            </View>
+          ) : null}
+          {extraDone ? <Txt variant="small" color={p.accent} style={{ textAlign: 'center', fontWeight: '700' }}>Auch die Zusatz-Übung ist geschafft.</Txt> : null}
           {finished && checkInDue ? (
             <Button
               label={checkInDue === 'final' ? 'Abschluss-Check machen' : 'Check-in machen'}
@@ -436,10 +477,10 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const both = video && mirror;
   const toggle = (kind: 'video' | 'mirror') => setFocus((f) => (f === kind ? 'both' : kind));
   // the running video, and the next one lying ready behind it when both are files: the same key keeps it at its turn
-  const nextFile = next?.videoId && next.videoAvailable ? videos.file(next.videoId) : null;
+  const nextFile = preload?.videoId && preload.videoAvailable ? videos.file(preload.videoId) : null;
   const players = [
     ...(stepVideo && (stepFile || streamNow) ? [{ s: step, file: stepFile }] : []),
-    ...(stepFile && next && nextFile ? [{ s: next, file: nextFile }] : []),
+    ...(stepFile && preload && nextFile ? [{ s: preload, file: nextFile }] : []),
   ];
   const stage = video || mirror ? (
     <View style={{ width, height: layout.height, marginBottom: both ? BADGE / 2 - space.s : 0 }}>
@@ -501,24 +542,24 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
             <Ionicons name="close" size={28} color={p.text} />
           </Pressable>
           <View style={{ flex: 1, flexDirection: 'row', gap: 4 }}>
-            {routine.steps.map((s, i) => (
-              <View key={s.id} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= index ? p.accent : p.surfaceAlt, opacity: i === index ? 0.6 : 1 }} />
+            {steps.slice(partStart, partEnd).map((s, j) => (
+              <View key={s.id} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: partStart + j <= index ? p.accent : p.surfaceAlt, opacity: partStart + j === index ? 0.6 : 1 }} />
             ))}
           </View>
-          <Txt variant="small" muted>{index + 1}/{routine.steps.length}</Txt>
+          <Txt variant="small" muted>{index - partStart + 1}/{partEnd - partStart}</Txt>
         </View>
 
         {chips}
 
         <View style={{ gap: space.xs }}>
-          <Txt variant="caption" color={p.accent}>Übung {index + 1}</Txt>
+          <Txt variant="caption" color={p.accent}>{extra ? 'Zusatz-Übung, freiwillig' : `Übung ${index + 1}`}</Txt>
           <Txt variant={both ? 'title' : 'display'}>{step.title}</Txt>
         </View>
 
         {stage}
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xl }}>
-          <RoundButton icon="play-skip-back" label="Vorherige Übung" disabled={index === 0} onPress={() => goTo(index - 1)} />
+          <RoundButton icon="play-skip-back" label="Vorherige Übung" disabled={index === partStart} onPress={() => goTo(index - 1)} />
           <RoundButton icon={running ? 'pause' : 'play'} label={running ? 'Pause' : 'Weiter'} big onPress={() => setRunning((v) => !v)} />
           {waitsForFertig
             ? <RoundButton icon="repeat" label="Video von vorne" onPress={fromTheStart} />

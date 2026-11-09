@@ -26,6 +26,8 @@ export interface RoutineStep {
   videoTitle: string | null; videoThumbnailUrl: string | null; videoAvailable: boolean;
   /** The length of the video; missing on older versions of the software. */
   videoDurationSec?: number | null;
+  /** "Freiwillig" (migration 0114): after the routine, by choice; missing on older software versions. */
+  optional?: boolean;
 }
 /** A routine with its own exercises per day (shared/types.ts MemberRoutinePlan, lib/plans.ts): `steps` are then those of today. */
 export interface MemberRoutinePlan {

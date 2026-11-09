@@ -26,7 +26,8 @@ export const openRoutine = (id: string) => router.push(`/routine/${encodeURIComp
 export const openPlan = (id: string) => router.push({ pathname: '/routine/plan', params: { id } } as unknown as Href);
 
 /** Total seconds of a routine. */
-export const routineSeconds = (routine: MemberRoutine) => routine.steps.reduce((sum, s) => sum + stepSeconds(s), 0);
+/** The time of the mandatory exercises: the optional ones come on top. */
+export const routineSeconds = (routine: MemberRoutine) => routine.steps.reduce((sum, s) => sum + (s.optional ? 0 : stepSeconds(s)), 0);
 
 const ON_PICTURE = '#FFFFFF';
 const ON_PICTURE_SOFT = 'rgba(255,255,255,0.85)';

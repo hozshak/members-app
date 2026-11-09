@@ -93,7 +93,7 @@ function ExerciseRow({ step, swapped, onSwap, onRestore }: { step: RoutineStep; 
       <ExerciseThumb step={step} size={56} />
       <View style={{ flex: 1, gap: 2 }}>
         <Txt variant="heading" numberOfLines={2}>{step.title}</Txt>
-        <Txt variant="small" muted>{clock(stepSeconds(step))}{swapped ? ' · Für heute getauscht' : ''}</Txt>
+        <Txt variant="small" muted>{clock(stepSeconds(step))}{step.optional ? ' · freiwillig' : ''}{swapped ? ' · Für heute getauscht' : ''}</Txt>
       </View>
       {swapped ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`${step.title}: zurück zur Übung aus dem Plan`} hitSlop={10} onPress={onRestore}>
