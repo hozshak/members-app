@@ -36,9 +36,11 @@ export function mainRoutine(list: readonly MemberRoutine[] | undefined): MemberR
   const usable = list.filter((r) => r.steps.length > 0);
   const running = usable.filter((r) => r.plan && planState(r) === 'running');
   return running.find((r) => r.plan?.kind === 'recommended') ?? running[0]
-    ?? usable.find((r) => r.plan?.kind === 'recommended' && planState(r) === 'open')
+    ?? usable.find((r) => r.plan?.kind === 'recommended' && planState(r) === 'open' && !r.skipped)
     ?? usable.find((r) => !r.plan)
     ?? usable.find((r) => r.plan && planState(r) === 'over')
+    // "schon länger dabei" and nothing else there: the skipped plan after all
+    ?? usable.find((r) => r.skipped)
     ?? null;
 }
 
@@ -50,7 +52,7 @@ export function waitingFor(list: readonly MemberRoutine[] | undefined, routine: 
   if (routine.plan?.kind !== 'recommended' || planState(routine) !== 'open') return null;
   for (const r of list ?? []) {
     if (r.id === routine.id) return null;
-    if (r.plan?.kind === 'recommended' && r.steps.length > 0 && planState(r) !== 'over') return r;
+    if (r.plan?.kind === 'recommended' && r.steps.length > 0 && planState(r) !== 'over' && !r.skipped) return r;
   }
   return null;
 }

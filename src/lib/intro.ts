@@ -44,6 +44,11 @@ export function useIntroState(productId: Id | undefined): IntroState {
   return useSyncExternalStore(subscribe, () => (productId ? state[productId] ?? NONE : NONE), () => NONE);
 }
 
+/** Every programme's state on this phone (the routine looks at the answers: "Ich bin schon länger dabei" skips the recommended plan). */
+export function useIntroStates(): Readonly<Record<string, IntroState>> {
+  return useSyncExternalStore(subscribe, () => state, () => state);
+}
+
 export function setIntroState(productId: Id, patch: Partial<IntroState>): void {
   state = { ...state, [productId]: { ...(state[productId] ?? NONE), ...patch } };
   listeners.forEach((x) => x());

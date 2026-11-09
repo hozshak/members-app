@@ -8,6 +8,7 @@ import { Pressable, View } from 'react-native';
 import { CategoryTile } from '@/components/content';
 import { Card, Txt } from '@/components/ui';
 import { uniqueById } from '@/lib/format';
+import { useAppTexts } from '@/lib/app-texts';
 import { openIntro, useIntroState, useIntrosLoaded } from '@/lib/intro';
 import { radius, space, usePalette } from '@/lib/theme';
 import type { MemberProduct, MemberProductDetail } from '@/lib/types';
@@ -93,6 +94,7 @@ function IntroRow({ product }: { product: MemberProduct }) {
 export function IntroStart({ products }: { products: readonly MemberProduct[] }) {
   const p = usePalette();
   const loaded = useIntrosLoaded();
+  const texts = useAppTexts();
   const withIntro = products.filter((x) => x.intro);
   if (!loaded || withIntro.length === 0) return null;
   return (
@@ -100,9 +102,9 @@ export function IntroStart({ products }: { products: readonly MemberProduct[] })
       <View style={{ gap: space.s }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
           <Ionicons name="compass" size={16} color={p.accent} />
-          <Txt variant="caption" color={p.accent}>So startest du</Txt>
+          <Txt variant="caption" color={p.accent}>{texts.startKicker}</Txt>
         </View>
-        <Txt variant="title">Womit du anfängst und was du wissen solltest</Txt>
+        <Txt variant="title">{texts.startTitle}</Txt>
       </View>
       <View style={{ gap: space.s }}>
         {withIntro.map((x) => <IntroRow key={x.id} product={x} />)}

@@ -33,6 +33,7 @@ import { useDayChecks } from '@/lib/goal';
 import {
   stepSeconds, useCheckIn, useRoutinePrefs, useRoutines, type MemberRoutine, type RoutineStats,
 } from '@/lib/routine';
+import { fillAppText, useAppTexts } from '@/lib/app-texts';
 import { overallStats } from '@/lib/plans';
 import { openCheckIn, useCheckDue } from '@/lib/progress-check';
 import { useApi } from '@/lib/session';
@@ -297,6 +298,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
     </View>
   );
 
+  const appTexts = useAppTexts();
   // ---------- start screen (lies over the run: the first video already loads underneath) ----------
   const startScreen = phase === 'ready' ? (
       <View style={[StyleSheet.absoluteFill, { zIndex: 10, backgroundColor: p.bg }]}>
@@ -326,6 +328,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
             </Txt>
           </View>
 
+          {!practice && routine.progressCheck ? <CheckInStart routine={routine} /> : null}
+
           <View style={{ gap: space.s }}>
             <Txt variant="heading">Das erwartet dich</Txt>
             <View style={{ borderRadius: radius.l, backgroundColor: p.surface, overflow: 'hidden' }}>
@@ -345,7 +349,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
       </View>
   ) : null;
 
-  // ---------- done: a popup over the last exercise ----------
+  // ---------- done: a popup over the last exercise (its texts from the dashboard, lib/app-texts.ts) ----------
   const donePopup = over ? (
     <Modal transparent visible animationType="fade" onRequestClose={() => router.back()} statusBarTranslucent>
       <View style={{ flex: 1, justifyContent: 'center', padding: space.l, backgroundColor: 'rgba(0,0,0,0.6)' }}>
@@ -353,7 +357,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
           <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name={practice ? 'checkmark' : 'flame'} size={56} color={p.accent} />
           </View>
-          <Txt variant="display" style={{ textAlign: 'center' }}>Geschafft!</Txt>
+          <Txt variant="display" style={{ textAlign: 'center' }}>{fillAppText(appTexts.doneTitle, { routine: routine.title })}</Txt>
           {practice ? (
             <>
               <Txt variant="title" style={{ textAlign: 'center' }}>{minutes(routine.totalSec)} {routine.title}</Txt>
@@ -380,7 +384,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
                   </View>
                 </View>
               ) : null}
-              <Txt muted style={{ textAlign: 'center' }}>{routine.title} ist für heute erledigt. Bis morgen!</Txt>
+              <Txt muted style={{ textAlign: 'center' }}>{fillAppText(appTexts.doneBody, { routine: routine.title })}</Txt>
             </>
           )}
           {finished && checkInDue ? (
@@ -595,5 +599,28 @@ function RoundButton({ icon, label, onPress, disabled, big }: {
     >
       <Ionicons name={icon} size={big ? 36 : 24} color={big ? p.onAccent : p.text} />
     </Pressable>
+  );
+}
+
+/** On the start screen (owner 09.11.2026: "Mach hier den Check-in rein"): the check-in of this routine, always voluntary; stands out on its day. */
+function CheckInStart({ routine }: { routine: MemberRoutine }) {
+  const p = usePalette();
+  const due = useCheckDue(routine);
+  return (
+    <View style={{ gap: space.s }}>
+      <Txt variant="heading">Dein Check-in</Txt>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => openCheckIn(routine.id)}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m, borderRadius: radius.l, backgroundColor: due ? p.accentSoft : p.surface, opacity: pressed ? 0.8 : 1 })}
+      >
+        <Ionicons name={due === 'final' ? 'ribbon-outline' : 'clipboard-outline'} size={24} color={p.accent} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt variant="heading">{due === 'final' ? 'Dein Abschluss-Check' : due ? 'Heute ist Check-in-Tag' : 'Check-in machen'}</Txt>
+          <Txt variant="small" muted>Fotos vergleichen und kurz in dich hineinhören. Ganz freiwillig, vor oder nach der Routine.</Txt>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
+      </Pressable>
+    </View>
   );
 }

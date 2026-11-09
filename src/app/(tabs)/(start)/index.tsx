@@ -5,7 +5,7 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HomeButtons, RatingPrompt } from '@/components/home-buttons';
+import { HomeButtons, RatingPrompt, ToolsButton } from '@/components/home-buttons';
 import { ProgressOverview } from '@/components/home-parts';
 import { IntroStart } from '@/components/intro-card';
 import { RoutineTodayCard } from '@/components/routine-parts';
@@ -42,7 +42,14 @@ export default function HomeScreen() {
         )}
         <Txt variant="display">{name ? `${greeting()}, ${name}` : greeting()}</Txt>
       </View>
-      {h.buttons && h.buttons.length > 0 ? <TourTarget id="start.buttons"><HomeButtons buttons={h.buttons} /></TourTarget> : null}
+      {(h.buttons && h.buttons.length > 0) || (h.tools && h.tools.length > 0) ? (
+        <TourTarget id="start.buttons">
+          <View style={{ flexDirection: 'row', gap: space.s }}>
+            {h.tools && h.tools.length > 0 ? <ToolsButton /> : null}
+            {h.buttons ? <HomeButtons buttons={h.buttons} /> : null}
+          </View>
+        </TourTarget>
+      ) : null}
       </View>
 
       <TourTarget id="start.intro"><IntroStart products={h.products} /></TourTarget>

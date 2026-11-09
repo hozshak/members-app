@@ -8,8 +8,10 @@ import * as Notifications from 'expo-notifications';
 import { AndroidImportance } from 'expo-notifications';
 import { router, type Href } from 'expo-router';
 import { Platform } from 'react-native';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { ApiError } from './api';
+import { setAppTexts } from './app-texts';
+import { useIntroStates, type IntroState } from './intro';
 import { localDay } from './nav';
 import { DEFAULT_REMINDER_TEXTS, plannedReminders, readReminderTexts } from './reminder-texts';
 import { useApi } from './session';
@@ -45,6 +47,25 @@ export interface MemberRoutine {
   challenge?: RoutineChallenge | null;
   /** Missing on software versions before the plans. */
   plan?: MemberRoutinePlan | null;
+  /** Own picture from the dashboard (09.11.2026); missing or null = the first video's thumbnail. */
+  imageUrl?: string | null;
+  /** The programmes behind the routine's tags; missing on older software versions. */
+  productIds?: Id[];
+  /** Set here, never by the server: a recommended plan the member skips, see skippedByIntro. */
+  skipped?: boolean;
+}
+
+/**
+ * A recommended plan the member skips (owner 09.11.2026): not started, and in the introduction of one of its programmes the member chose any answer but the
+ * first ("Ich bin schon länger dabei"). A plan for all members counts every programme. It stays there to be started by choice.
+ */
+export function skippedByIntro(r: MemberRoutine, intros: Readonly<Record<string, IntroState>>): boolean {
+  const ch = r.challenge;
+  const open = !ch || !ch.startDay || ch.dayNumber === null;
+  if (r.plan?.kind !== 'recommended' || !open) return false;
+  const experienced = (id: string) => (intros[id]?.level ?? 0) > 0;
+  const ids = r.productIds ?? [];
+  return ids.length > 0 ? ids.some(experienced) : Object.keys(intros).some(experienced);
 }
 
 export const routineKey = ['routines'] as const;
@@ -71,12 +92,21 @@ export function useReminderTexts() {
 
 export function useRoutines() {
   const api = useApi();
+  const intros = useIntroStates();
+  const marks = JSON.stringify(Object.entries(intros).map(([id, s]) => [id, s.level]));
+  const select = useCallback(
+    (list: MemberRoutine[]) => (list.some((r) => skippedByIntro(r, intros)) ? list.map((r) => (skippedByIntro(r, intros) ? { ...r, skipped: true } : r)) : list),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `marks` stands for the answers in `intros`
+    [marks],
+  );
   return useQuery({
+    select,
     queryKey: routineKey,
     queryFn: async () => {
       try {
-        const answer = await api.get<{ items: MemberRoutine[]; reminderTexts?: unknown }>(`/api/member/routines?day=${localDay()}`);
+        const answer = await api.get<{ items: MemberRoutine[]; reminderTexts?: unknown; appTexts?: unknown }>(`/api/member/routines?day=${localDay()}`);
         setReminderTexts(answer.reminderTexts);
+        setAppTexts(answer.appTexts);
         return answer.items;
       } catch (err) {
         // a community whose software has no routines yet answers 404: nothing to show, no error

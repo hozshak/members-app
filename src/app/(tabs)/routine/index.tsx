@@ -217,7 +217,7 @@ function PlanCard({ routine, waiting }: { routine: MemberRoutine; waiting: Membe
     <Card onPress={() => openPlan(routine.id)} accessibilityLabel={`${planLabel(routine)}: ${routine.title}`} style={{ padding: space.l, gap: space.s }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
         <Ionicons name={state === 'over' ? 'trophy' : 'ribbon'} size={18} color={p.accent} />
-        <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>{planLabel(routine)}</Txt>
+        <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>{routine.skipped ? 'Für den Einstieg' : planLabel(routine)}</Txt>
         <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
       </View>
       <Txt variant="heading">{routine.title}</Txt>
@@ -227,7 +227,7 @@ function PlanCard({ routine, waiting }: { routine: MemberRoutine; waiting: Membe
           <Txt variant="small" muted>Tag {ch.dayNumber} von {ch.days} · {ch.doneDays} erledigt</Txt>
         </>
       ) : (
-        <Txt variant="small" muted>{state === 'over' ? 'Zu Ende: Sieh dir deinen Unterschied an.' : 'Noch nicht gestartet'}</Txt>
+        <Txt variant="small" muted>{state === 'over' ? 'Zu Ende: Sieh dir deinen Unterschied an.' : routine.skipped ? 'Für alle, die neu anfangen. Du kannst ihn trotzdem machen.' : 'Noch nicht gestartet'}</Txt>
       )}
     </Card>
   );
@@ -237,7 +237,7 @@ function PlanCard({ routine, waiting }: { routine: MemberRoutine; waiting: Membe
 function TodayHero({ routine }: { routine: MemberRoutine }) {
   const state = routine.plan ? planState(routine) : null;
   const ch = routine.challenge;
-  const picture = routine.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
+  const picture = routine.imageUrl ?? routine.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
   const open = () => openPlan(routine.id);
   const label = state === 'running' && ch ? `Tag ${ch.dayNumber} von ${ch.days}` : state === 'over' ? 'Plan beendet' : routine.plan ? planLabel(routine) : 'Heute';
   const line = state === 'open' && routine.plan

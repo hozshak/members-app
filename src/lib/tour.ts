@@ -16,17 +16,17 @@ export type TourId = 'start' | 'inhalte' | 'routine' | 'profil';
 export interface TourStep { target?: string; tab?: number; title: string; text: string }
 
 /** The tabs in the order of the tab bar. */
-export const TAB_ROUTES = ['/', '/inhalte', '/routine', '/profil'] as const;
+export const TAB_ROUTES = ['/', '/routine', '/inhalte', '/profil'] as const;
 
 const STEPS: Record<TourId, TourStep[]> = {
   start: [
     { title: 'Willkommen bei {name}', text: 'Schön, dass du da bist! Ich zeige dir kurz, was wo ist. Die anderen Bereiche erkläre ich dir, sobald du sie zum ersten Mal öffnest.' },
-    { target: 'start.buttons', title: 'WhatsApp und Bewertung', text: 'Hier oben kommst du in die WhatsApp-Gruppe. Mit dem goldenen Stern gibst du eine Bewertung ab.' },
+    { target: 'start.buttons', title: 'WhatsApp, Tools und Bewertung', text: 'Hier oben kommst du in die WhatsApp-Gruppe und zu deinen Tools. Mit dem goldenen Stern gibst du eine Bewertung ab.' },
     { target: 'start.intro', title: 'So startest du', text: 'Für jedes Programm steht hier, womit du anfängst. Tippe drauf, dann öffnet sich die Einführung.' },
     { target: 'start.routine', title: 'Deine Routine heute', text: 'Ein Fingertipp, und du bist bei deinen Übungen für heute.' },
     { target: 'start.progress', title: 'Dein Fortschritt', text: 'So weit bist du in deinen Programmen und in der Routine. Tippe drauf, und du bist direkt dort.' },
-    { tab: 1, title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
-    { tab: 2, title: 'Routine', text: 'Hier ist dein tägliches Training: Übungen zum Mitmachen, Abhaken und deine Fotos.' },
+    { tab: 1, title: 'Routine', text: 'Hier ist dein tägliches Training: Übungen zum Mitmachen und deine Fotos.' },
+    { tab: 2, title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
     { tab: 3, title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
   ],
   inhalte: [

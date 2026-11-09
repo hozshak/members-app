@@ -97,7 +97,8 @@ export default function ProfileScreen() {
             >
               <Txt variant="small" style={{ fontWeight: '700', flexShrink: 1 }}>
                 {frame.name}
-                {frame.next ? ` · noch ${frame.next.days === 1 ? '1 Übungstag' : `${frame.next.days} Übungstage`} bis ${frame.next.name}` : ''}
+                {` · ${stats.totalDays === 1 ? '1 Übungstag' : `${stats.totalDays} Übungstage`}`}
+                {frame.next ? `, noch ${frame.next.days} bis ${frame.next.name}` : ''}
               </Txt>
               <Ionicons name="alert-circle" size={22} color={p.accent} />
             </Pressable>

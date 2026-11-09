@@ -82,7 +82,12 @@ export interface MemberHome extends MemberLibrary {
   greetingName: string; continueWatching: VideoCard[]; categories: CategoryCard[];
   /** Older installations send none. */
   buttons?: MemberHomeButton[];
+  /** "Deine Tools" (09.11.2026); older installations send none. */
+  tools?: MemberTool[];
+  /** The coach's texts of the app (lib/app-texts.ts); older installations send none. */
+  appTexts?: unknown;
 }
+export interface MemberTool { id: string; title: string; url: string; text: string }
 
 export interface MemberCategoryDetail { category: CategoryCard; videos: VideoCard[]; sections: SectionCard[]; products: ProductRef[] }
 

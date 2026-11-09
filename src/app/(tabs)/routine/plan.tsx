@@ -223,7 +223,7 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   const doneToday = routine.stats.doneToday;
   const busy = plan.start.isPending || plan.leave.isPending;
   const error = plan.start.error ?? plan.leave.error;
-  const picture = today.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
+  const picture = routine.imageUrl ?? today.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
   const todaySec = today.steps.reduce((sum, s) => sum + stepSeconds(s), 0);
   const seePhotos = () => router.push('/routine/fotos' as Href);
 

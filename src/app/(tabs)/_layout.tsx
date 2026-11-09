@@ -20,13 +20,13 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Start</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="inhalte">
-        <NativeTabs.Trigger.Label>Inhalte</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'square.stack', selected: 'square.stack.fill' }} md="video_library" />
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="routine">
         <NativeTabs.Trigger.Label>Routine</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'flame', selected: 'flame.fill' }} md="local_fire_department" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="inhalte">
+        <NativeTabs.Trigger.Label>Inhalte</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'square.stack', selected: 'square.stack.fill' }} md="video_library" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profil">
         <NativeTabs.Trigger.Label>Profil</NativeTabs.Trigger.Label>

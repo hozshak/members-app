@@ -1,5 +1,6 @@
 // Data of the member area (React Query): the same endpoints as the website's member area (src/modules/player/api.ts
 // of the software). Marking a lesson as done refreshes everything that shows progress.
+import { setAppTexts } from './app-texts';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApi } from './session';
 import type {
@@ -18,7 +19,14 @@ export const keys = {
 
 export function useHome() {
   const api = useApi();
-  return useQuery({ queryKey: keys.home, queryFn: () => api.get<MemberHome>('/api/member/home') });
+  return useQuery({
+    queryKey: keys.home,
+    queryFn: async () => {
+      const home = await api.get<MemberHome>('/api/member/home');
+      setAppTexts(home.appTexts);
+      return home;
+    },
+  });
 }
 
 export function useLibrary() {

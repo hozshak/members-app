@@ -4,7 +4,7 @@
 // opens the chat app, everything else the browser. The software only sends enabled buttons the member may see. Here too the popup
 // that asks for a rating after a month (lib/rating.ts).
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Animated, Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { usePulse } from '@/lib/motion';
@@ -85,6 +85,24 @@ export function HomeButtons({ buttons }: { buttons: MemberHomeButton[] }) {
         );
       })}
     </View>
+  );
+}
+
+/** "Deine Tools" (owner 09.11.2026): its own icon next to the buttons, only when the coach entered tools. */
+export function ToolsButton() {
+  const p = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Deine Tools"
+      onPress={() => router.push('/tools' as Href)}
+      style={({ pressed }) => ({
+        width: SIZE, height: SIZE, borderRadius: SIZE / 2, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: p.accentSoft, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.96 : 1 }],
+      })}
+    >
+      <Ionicons name="bag-handle" size={22} color={p.accent} />
+    </Pressable>
   );
 }
 
