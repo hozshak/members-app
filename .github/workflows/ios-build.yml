@@ -1,0 +1,82 @@
+# Builds the iOS app on a Mac of GitHub (free Actions minutes) instead of on EAS's servers, whose free plan has 15 iOS builds a month, and uploads it to
+# TestFlight. Started by hand: Actions → "iOS-Build" → "Run workflow".
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   EXPO_TOKEN      an access token of the Expo account (expo.dev → Account settings → Access tokens). The build fetches the signing certificate and
+#                   the provisioning profiles from Expo's servers with it, and the build number counts on there (appVersionSource "remote").
+#   ASC_API_KEY_P8  the whole content of the App Store Connect key file AuthKey_<id>.p8, for the upload to TestFlight.
+#
+# Mac: "macos-26" has Xcode 26 by default; EAS builds SDK 58 with Xcode 27, which GitHub offers as a preview runner "xcode-27". The newest Xcode on the
+# runner is chosen. A build takes about 20–30 minutes; the .ipa stays an artifact of the run for 7 days.
+name: iOS-Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Mac: macos-26 (Xcode 26) oder xcode-27 (Vorschau mit Xcode 27, wie bei EAS)'
+        type: choice
+        options: [macos-26, xcode-27]
+        default: macos-26
+      submit:
+        description: 'Danach zu TestFlight hochladen'
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Neueste Xcode-Version wählen
+        run: |
+          XCODE=$(node -e "
+            const fs = require('fs');
+            const apps = fs.readdirSync('/Applications').filter((n) => /^Xcode_[0-9.]+\.app$/.test(n));
+            const v = (n) => n.match(/[0-9.]+/)[0].split('.').map(Number);
+            apps.sort((a, b) => { const x = v(a), y = v(b); for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0); return 0; });
+            console.log('/Applications/' + (apps.pop() ?? 'Xcode.app'));
+          ")
+          echo "Xcode: $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Pakete
+        run: npm ci
+
+      - name: EAS CLI
+        run: npm install -g eas-cli@latest
+
+      - name: Bauen
+        run: eas build --platform ios --profile production --local --non-interactive --output "$RUNNER_TEMP/members.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: members-ipa
+          path: ${{ runner.temp }}/members.ipa
+          retention-days: 7
+
+      - name: Zu TestFlight hochladen
+        if: ${{ inputs.submit }}
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: |
+          printf '%s\n' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/asc.p8"
+          # the upload settings only for this run: the key file lies on the runner, the ids are no secrets
+          node -e "
+            const fs = require('fs');
+            const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+            eas.submit = { production: { ios: { ascAppId: '6829750202', ascApiKeyPath: process.env.RUNNER_TEMP + '/asc.p8', ascApiKeyId: '59WR3M734D', ascApiKeyIssuerId: 'cb1544d3-61cb-49f5-8fd5-16716b38f461' } } };
+            fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2));
+          "
+          eas submit --platform ios --profile production --path "$RUNNER_TEMP/members.ipa" --non-interactive
+          rm -f "$RUNNER_TEMP/asc.p8"
