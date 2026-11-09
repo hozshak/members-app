@@ -23,6 +23,11 @@ on:
         type: boolean
         default: true
 
+# never two builds at the same time: both would take the next build number from Expo's servers
+concurrency:
+  group: ios-build
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
