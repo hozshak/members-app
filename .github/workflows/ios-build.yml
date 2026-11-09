@@ -62,7 +62,17 @@ jobs:
         run: npm install -g eas-cli@latest
 
       - name: Bauen
-        run: eas build --platform ios --profile production --local --non-interactive --output "$RUNNER_TEMP/members.ipa"
+        # The build folder must not lie under /var (on macOS only a link to /private/var): expo-widgets writes the absolute path of the widget layouts
+        # with /var, Metro works with the resolved /private/var and then does not find them ("Unable to resolve module …/src/widgets/routine-widget.ios.tsx",
+        # first run 09.11.2026). EAS's own servers build elsewhere, that is why it never showed there.
+        env:
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
+          EAS_BUILD_NO_EXPO_GO_WARNING: 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/tmp"
+          export TMPDIR="$RUNNER_TEMP/tmp"
+          echo "Bauordner: $EAS_LOCAL_BUILD_WORKINGDIR (tmp: $TMPDIR)"
+          eas build --platform ios --profile production --local --non-interactive --output "$RUNNER_TEMP/members.ipa"
 
       - uses: actions/upload-artifact@v4
         with:
