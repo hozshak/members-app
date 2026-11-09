@@ -229,9 +229,11 @@ function Plan({ routine }: { routine: MemberRoutine }) {
 
   const start = () => plan.start.mutate(isZone ? goal : undefined, {
     onSuccess: () => {
-      clearPlanPhotos(routine.id);
+      // a before photo taken shortly before, e.g. from the introduction (owner 09.11.2026), stays: the camera does not ask a second time
+      const fresh = !!before && Date.now() - before.takenAt.getTime() < 14 * 86_400_000;
+      if (!fresh) clearPlanPhotos(routine.id);
       if (isZone) setGoal({ text: info.zoneName ?? routine.title, perWeek: 7, days: goal, startDay: localDay() });
-      if (Platform.OS !== 'web') camera(routine.id, 'start');
+      if (Platform.OS !== 'web' && !fresh) camera(routine.id, 'start');
     },
   });
   const startAgain = () => plan.start.mutate(undefined, {

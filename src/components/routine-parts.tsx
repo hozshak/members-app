@@ -9,7 +9,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-nat
 import Svg, { Circle } from 'react-native-svg';
 import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
-import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planLabel, planState } from '@/lib/plans';
+import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planChoice, planLabel, planState } from '@/lib/plans';
 import { useSession } from '@/lib/session';
 import { stepSeconds, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
 import { useZones } from '@/lib/zones';
@@ -279,6 +279,29 @@ export function RoutineTodayCard() {
   const q = useRoutines();
   const routine = mainRoutine(q.data);
   if (!routine || routine.steps.length === 0) return null;
+  // several plans to choose from (owner 09.11.2026): the choice is on the Routine tab
+  const choice = planChoice(q.data);
+  if (choice) {
+    return (
+      <TourTarget id="start.routine">
+        <Card
+          onPress={() => router.navigate('/routine' as Href)}
+          accessibilityLabel="Wähle deinen Plan"
+          style={{ padding: space.l, flexDirection: 'row', alignItems: 'center', gap: space.m, backgroundColor: p.accentSoft, borderColor: 'transparent' }}
+        >
+          <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: p.surface, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="ribbon" size={26} color={p.accent} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt variant="caption" color={p.accent}>Deine Routine</Txt>
+            <Txt variant="heading">Wähle deinen Plan</Txt>
+            <Txt variant="small" muted>{choice.length === 2 ? 'Zwei Programme' : `${choice.length} Programme`} mit eigenem Plan: Womit fängst du an?</Txt>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color={p.accent} />
+        </Card>
+      </TourTarget>
+    );
+  }
   const done = routine.stats.doneToday;
   const streak = overallStats(q.data).streak;
   const state = routine.plan ? planState(routine) : null;

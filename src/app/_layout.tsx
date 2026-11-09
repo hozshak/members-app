@@ -45,6 +45,7 @@ function RootStack() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="pdf" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="einfuehrung" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+          <Stack.Screen name="foto" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="tools" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>

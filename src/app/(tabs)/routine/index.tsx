@@ -5,6 +5,8 @@
 // what it counts. The settings of the reminders are under "Profil". When the coach offers a check-in (lib/progress-check.ts) the app suggests it below
 // the plan when it is due, and the button "Check-ins" next to the flame leads to the ones done so far.
 // "Gezielt üben" and the own goal are out of the app (owner 06.11.2026); their screens (routine/zone.tsx, routine/ziel.tsx) are no longer linked.
+// Several recommended plans, e.g. of two programmes, and none started (owner 09.11.2026): "Womit fängst du an?" instead of today's picture, one card per
+// plan with its programme; the plans not chosen wait until the chosen one is done (lib/plans.ts planChoice, waitingFor).
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
@@ -20,7 +22,8 @@ import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
 import { useDayChecks } from '@/lib/goal';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
-import { goalLabel, mainRoutine, overallStats, planLabel, planState, useSwaps, waitingFor, withSwaps } from '@/lib/plans';
+import { goalLabel, mainRoutine, overallStats, planChoice, planLabel, planState, useSwaps, waitingFor, withSwaps } from '@/lib/plans';
+import { useHome } from '@/lib/queries';
 import {
   allowNotifications, listPhotos, stepSeconds, syncReminders, useChallenge, useRoutinePrefs, useRoutines,
   type MemberRoutine, type ProgressPhoto, type RoutineStats,
@@ -235,6 +238,54 @@ function PlanCard({ routine, waiting }: { routine: MemberRoutine; waiting: Membe
   );
 }
 
+/** The member has several plans to start: one card each, with its programme; a tap opens the plan with its start. */
+function PlanChooser({ plans }: { plans: MemberRoutine[] }) {
+  const p = usePalette();
+  const home = useHome();
+  const names = new Map((home.data?.products ?? []).map((x) => [x.id, x.title]));
+  return (
+    <TourTarget id="routine.hero">
+      <View style={{ gap: space.m }}>
+        <View style={{ gap: space.xs }}>
+          <Txt variant="title">Womit fängst du an?</Txt>
+          <Txt muted>
+            {plans.length === 2 ? 'Du hast zwei Programme mit eigenem Plan.' : `Du hast ${plans.length} Programme mit eigenem Plan.`} Wähle einen, die anderen warten, bis du ihn geschafft hast.
+          </Txt>
+        </View>
+        {plans.map((r) => {
+          const picture = r.imageUrl ?? r.steps.find((s) => s.videoThumbnailUrl)?.videoThumbnailUrl ?? null;
+          const programme = (r.productIds ?? []).map((id) => names.get(id)).find(Boolean) ?? planLabel(r);
+          const sec = routineSeconds(r);
+          return (
+            <Card key={r.id} onPress={() => openPlan(r.id)} accessibilityLabel={`${programme}: ${r.title} ansehen und starten`} style={{ flexDirection: 'row', alignItems: 'center', gap: space.m, padding: space.m }}>
+              <ChoicePicture url={picture} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt variant="caption" color={p.accent} numberOfLines={1}>{programme}</Txt>
+                <Txt variant="heading" numberOfLines={2}>{r.title}</Txt>
+                <Txt variant="small" muted>{r.plan ? goalLabel(r.plan.days) : ''}{sec > 0 ? ` · ca. ${minutes(sec)} am Tag` : ''}</Txt>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={p.textMuted} />
+            </Card>
+          );
+        })}
+      </View>
+    </TourTarget>
+  );
+}
+
+function ChoicePicture({ url }: { url: string | null }) {
+  const p = usePalette();
+  const { api } = useSession();
+  if (!url || !api) {
+    return (
+      <View style={{ width: 76, height: 76, borderRadius: radius.m, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name="ribbon" size={28} color={p.accent} />
+      </View>
+    );
+  }
+  return <Image source={{ uri: api.url(url), headers: api.mediaHeaders() }} style={{ width: 76, height: 76, borderRadius: radius.m, backgroundColor: p.surfaceAlt }} contentFit="cover" />;
+}
+
 /** Today's routine on a large picture, with the one action of this page. */
 function TodayHero({ routine }: { routine: MemberRoutine }) {
   const state = routine.plan ? planState(routine) : null;
@@ -363,7 +414,8 @@ export default function RoutineScreen() {
   // calendar and goal count every routine: changing from one plan to another does not lose them
   const stats = overallStats(q.data);
   const today = main ? withSwaps(main, swaps.steps) : null;
-  const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open'));
+  const choice = planChoice(q.data);
+  const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open') && !choice?.some((c) => c.id === r.id));
   const showWay = !!main && (planState(main) === 'running' || !main.plan || stats.totalDays > 0);
 
   return (
@@ -400,7 +452,7 @@ export default function RoutineScreen() {
         </>
       ) : (
         <>
-          <TodayHero routine={today} />
+          {choice ? <PlanChooser plans={choice} /> : <TodayHero routine={today} />}
           {showWay ? <WayCard routine={main} days={stats.days} /> : null}
           <CheckInSuggestion routine={main} />
           {main.plan && planState(main) === 'over' ? null : <ReminderHint routine={main} />}

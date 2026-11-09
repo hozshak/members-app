@@ -45,16 +45,28 @@ export function mainRoutine(list: readonly MemberRoutine[] | undefined): MemberR
 }
 
 /**
- * There is one recommended plan per programme (owner 04.11.2026). Who has several does them one after the other, in the order of the list: the
- * plan this one still waits for, null when it may start.
+ * There is one recommended plan per programme (owner 04.11.2026). Who has several does them one after the other; which one first, the member chooses
+ * (owner 09.11.2026, planChoice). The plan under way this one waits for, null when it may start.
  */
 export function waitingFor(list: readonly MemberRoutine[] | undefined, routine: MemberRoutine): MemberRoutine | null {
   if (routine.plan?.kind !== 'recommended' || planState(routine) !== 'open') return null;
-  for (const r of list ?? []) {
-    if (r.id === routine.id) return null;
-    if (r.plan?.kind === 'recommended' && r.steps.length > 0 && planState(r) !== 'over' && !r.skipped) return r;
-  }
-  return null;
+  return (list ?? []).find((r) => r.id !== routine.id && r.plan?.kind === 'recommended' && r.steps.length > 0 && planState(r) === 'running') ?? null;
+}
+
+/**
+ * Several recommended plans, e.g. of two programmes, and none under way (owner 09.11.2026: "auswählen, welche Routine sie anfangen möchten"): the plans to
+ * choose from, in the order of the dashboard; null when there is nothing to choose. A plan skipped through the introduction is no choice.
+ */
+export function planChoice(list: readonly MemberRoutine[] | undefined): MemberRoutine[] | null {
+  const all = (list ?? []).filter((r) => r.steps.length > 0);
+  if (all.some((r) => r.plan && planState(r) === 'running')) return null;
+  const open = all.filter((r) => r.plan?.kind === 'recommended' && planState(r) === 'open' && !r.skipped);
+  return open.length >= 2 ? open : null;
+}
+
+/** The recommended plan of a programme (the routine's tags lead to it, `productIds`); null when it has none. */
+export function planOfProgramme(list: readonly MemberRoutine[] | undefined, productId: string): MemberRoutine | null {
+  return (list ?? []).find((r) => r.plan?.kind === 'recommended' && r.steps.length > 0 && (r.productIds ?? []).includes(productId)) ?? null;
 }
 
 /**

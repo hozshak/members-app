@@ -7,11 +7,21 @@ import { getItem, setItem } from './storage';
 import type { Id } from './types';
 
 export interface ProgrammeIntroLevel { label: string; hint: string; text: string; categoryIds: Id[] }
-export interface ProgrammeIntroPage { title: string; text: string }
-export interface ProgrammeIntro { title: string; lead: string; question: string; levels: ProgrammeIntroLevel[]; pages: ProgrammeIntroPage[]; closing: string }
+/** A picture where the line `[Bild: <label>]` stands in the text (09.11.2026, lib/intro-text.ts). */
+export interface ProgrammeIntroImage { label: string; url: string }
+/** The button at the end of a page (09.11.2026): the programme's plan, its before photo, a category of the programme (`target` its id), a website. */
+export interface ProgrammeIntroLink { kind: 'plan' | 'photo' | 'category' | 'url'; label: string; target: string }
+/** `images` and `link` are missing on software versions before 09.11.2026. */
+export interface ProgrammeIntroPage { title: string; text: string; images?: ProgrammeIntroImage[]; link?: ProgrammeIntroLink | null }
+export interface ProgrammeIntro {
+  title: string; lead: string; leadImages?: ProgrammeIntroImage[]; question: string; levels: ProgrammeIntroLevel[]; pages: ProgrammeIntroPage[]; closing: string;
+}
 
-/** `seen`: it opened by itself once. `finished`: gone through to the end or on into a category; until then the start page keeps pointing to it (leaving it by accident loses nothing). */
-export interface IntroState { seen: boolean; level: number | null; finished?: boolean }
+/**
+ * `seen`: it opened by itself once. `finished`: gone through to the end or on into a category; until then the start page keeps pointing to it (leaving it by
+ * accident loses nothing). `page`: where the member left it, e.g. for the plan or a category a page links to; it opens there again until it is finished.
+ */
+export interface IntroState { seen: boolean; level: number | null; finished?: boolean; page?: number }
 
 const KEY = 'members.intros';
 const NONE: IntroState = { seen: false, level: null };
