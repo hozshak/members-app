@@ -1,0 +1,63 @@
+# Builds the Android app as a file (APK) on a Linux machine of GitHub (free Actions minutes; local builds do not count against Expo's build quota) and keeps
+# it as an artifact of the run for 7 days. Then: open the run → "Artifacts" → "android-apk" (a ZIP) → unzip → upload the .apk in the dashboard
+# (Einstellungen → Mitgliederbereich → App zum Herunterladen). Started by hand: Actions → "Android-Build" → "Run workflow". Takes about 20–40 minutes.
+#
+# Needs the repository secret EXPO_TOKEN (the same as the iOS build). The app's signing key (keystore) lies with Expo; it is made once in the terminal with
+# `npx eas-cli credentials -p android` → "Set up a new keystore" (a build without it stops and says so). Every build counts the version code up on Expo's
+# servers, so a newer file installs over an older one.
+#
+# The build profile "apk" exists only here (written into eas.json for this run): eas.json in the repository stays as it is.
+name: Android-Build
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: android-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Pakete
+        run: npm ci
+
+      - name: EAS CLI
+        run: npm install -g eas-cli@latest
+
+      - name: Bauprofil für die APK
+        run: |
+          node -e "
+            const fs = require('fs');
+            const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+            eas.build = { ...eas.build, apk: { distribution: 'internal', autoIncrement: true, android: { buildType: 'apk' } } };
+            fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2));
+          "
+
+      - name: Bauen
+        env:
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
+          EAS_BUILD_NO_EXPO_GO_WARNING: 'true'
+        run: eas build --platform android --profile apk --local --non-interactive --output "$RUNNER_TEMP/THFM.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ runner.temp }}/THFM.apk
+          retention-days: 7
