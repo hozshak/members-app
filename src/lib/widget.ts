@@ -5,7 +5,7 @@
 // midnight, the streak lost when a day stayed open. Android has no timelines and shows what the app last sent.
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
-import type { CheckInWidgetProps, RoutineWidgetProps } from '@/widgets/props';
+import type { CheckInWidgetProps, RoutineWidgetProps, TongueWidgetProps } from '@/widgets/props';
 import { localDay } from './nav';
 import { deeper, onColor } from './color';
 import type { CheckDue } from './progress-check';
@@ -145,5 +145,25 @@ export function sendCheckInToWidget(entries: { date: Date; props: CheckInWidgetP
 export function clearCheckInWidget(accent = '#BD9553'): void {
   try {
     checkInWidget()?.updateSnapshot({ state: 'none', inDays: 0, count: 0, routineId: '', accent, accentDeep: deeper(accent), onAccent: onColor(accent) });
+  } catch { /* the app works without the widget */ }
+}
+
+// ---------- the tongue widget (owner 10.11.2026) ----------
+
+let tongueHandle: { updateSnapshot(props: TongueWidgetProps): void } | null | undefined;
+
+/** The colours of the community for the tongue widget (it shows nothing personal, so it stays as it is when logging out). */
+export function sendTongueToWidget(accent = '#BD9553'): void {
+  if (!available) return;
+  if (tongueHandle === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- must not load in Expo Go: the native module is missing there
+      tongueHandle = (require('@/widgets/tongue-widget') as { default: { updateSnapshot(props: TongueWidgetProps): void } }).default;
+    } catch {
+      tongueHandle = null;
+    }
+  }
+  try {
+    tongueHandle?.updateSnapshot({ accent, accentDeep: deeper(accent), onAccent: onColor(accent) });
   } catch { /* the app works without the widget */ }
 }

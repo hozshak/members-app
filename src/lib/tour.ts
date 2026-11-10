@@ -2,6 +2,9 @@
 // about and says what it is; first the start page with a circle around each tab, the other tabs when the member opens them. A step whose
 // thing is not on the screen (no downloads, no routine) is left out. Remembered on this phone; "Einführung ansehen" in the profile starts
 // over. This file is the state, components/tour.tsx draws it.
+// 10.11.2026 (owner: "die Einführung soll auch darauf gehen und erklären", "wenn ich auf einen Plan gehe, soll mir die Routine-Einführung zeigen, wo man
+// alles klicken kann"): a tour for the page of a plan (before and after it is started) and "Routine beenden" in the profile. A step can be newer than its
+// tour (`since`): who has seen the tour before gets only the new steps, once.
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useSyncExternalStore, type ComponentRef, type RefObject } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from 'react-native';
@@ -10,10 +13,11 @@ import { getItem, setItem } from './storage';
 type ViewRef = ComponentRef<typeof View>;
 type ScrollRef = ComponentRef<typeof ScrollView>;
 
-export type TourId = 'start' | 'inhalte' | 'routine' | 'profil';
+/** `plan`: the page of a started plan; `planStart`: the page of a plan before it is started. */
+export type TourId = 'start' | 'inhalte' | 'routine' | 'profil' | 'plan' | 'planStart';
 
-/** `target`: a TourTarget on the screen; `tab`: an item of the tab bar; neither: a card in the middle. */
-export interface TourStep { target?: string; tab?: number; title: string; text: string }
+/** `target`: a TourTarget on the screen; `tab`: an item of the tab bar; neither: a card in the middle. `since`: the version of the tour it came with (1). */
+export interface TourStep { target?: string; tab?: number; title: string; text: string; since?: number }
 
 /** The tabs in the order of the tab bar. */
 export const TAB_ROUTES = ['/', '/routine', '/inhalte', '/profil'] as const;
@@ -27,7 +31,7 @@ const STEPS: Record<TourId, TourStep[]> = {
     { target: 'start.progress', title: 'Dein Fortschritt', text: 'So weit bist du in deinen Programmen und in der Routine. Tippe drauf, und du bist direkt dort.' },
     { tab: 1, title: 'Routine', text: 'Hier ist dein tägliches Training: Übungen zum Mitmachen und deine Fotos.' },
     { tab: 2, title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
-    { tab: 3, title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
+    { tab: 3, title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein, beendest eine Routine und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
   ],
   inhalte: [
     { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Inhalte“. Ich führe dich einmal rum.' },
@@ -50,17 +54,39 @@ const STEPS: Record<TourId, TourStep[]> = {
     { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Profil“. Ich führe dich einmal rum.' },
     { target: 'profil.frame', title: 'Dein Rahmen', text: 'Mit jedem Übungstag wird der Rahmen um dein Foto schöner. Das Ausrufezeichen zeigt dir alle Stufen.' },
     { target: 'profil.reminders', title: 'Erinnerungen', text: 'Hier stellst du ein, wann dich die App an deine Routine erinnert.' },
+    { target: 'profil.routines', title: 'Routine beenden', text: 'Hier siehst du deine Routinen und kannst eine beenden, zum Beispiel um eine andere anzufangen. Deine erledigten Tage bleiben erhalten.', since: 2 },
+    { target: 'profil.tongue', title: 'Zungen-Erinnerung', text: 'Ein paar Mal am Tag fragt dich die App: „Wo ist deine Zunge gerade?“. Hier schaltest du das ein.', since: 2 },
     { target: 'profil.icon', title: 'App-Icon', text: 'Such dir aus, wie die App auf deinem Home-Bildschirm aussieht.' },
     { target: 'profil.intro', title: 'Einführung ansehen', text: 'Hier kannst du dir das alles noch einmal zeigen lassen.' },
   ],
+  planStart: [
+    { title: 'Dein neuer Plan', text: 'Ich zeige dir kurz, wo du was findest, bevor du startest.' },
+    { target: 'plan.goal', title: 'Dein Ziel', text: 'Wähle, wie lange du üben möchtest. Du kannst es später ändern.' },
+    { target: 'plan.how', title: 'So läuft dein Plan', text: 'Hier steht in drei Sätzen, wie dein Plan funktioniert.' },
+    { target: 'plan.start', title: 'Plan starten', text: 'Ein Tipp, und dein Plan beginnt heute. Danach machst du dein Vorher-Foto.' },
+    { target: 'plan.firstDay', title: 'Dein erster Tag', text: 'Diese Übungen erwarten dich an Tag 1, mit ihrer Dauer.' },
+  ],
+  plan: [
+    { title: 'Dein Plan', text: 'Ich zeige dir einmal, wo du hier was findest.' },
+    { target: 'plan.hero', title: 'Routine starten', text: 'Hier startest du deine Übungen von heute. Die App spielt dir jedes Video vor und hakt ab, was du gemacht hast.' },
+    { target: 'plan.today', title: 'Heute', text: 'Deine Übungen für heute. Mit den Pfeilen tauschst du eine Übung für heute gegen eine andere, wenn sie angeboten werden.' },
+    { target: 'plan.days', title: 'Dein Weg', text: 'Jeder erledigte Tag bekommt einen Haken. So siehst du, wie weit du schon bist.' },
+    { target: 'plan.photos', title: 'Vorher und Nachher', text: 'Am Start machst du Fotos von vorne, rechts und links, am letzten Tag noch einmal. Tippe drauf, dann vergleichst du sie.' },
+    { target: 'plan.checkins', title: 'Deine Check-ins', text: 'Zwischendurch fragt dich die App, wie es dir geht, und du machst neue Fotos. Hier findest du alle.' },
+    { target: 'plan.menu', title: 'Neu beginnen oder beenden', text: 'Hier fängst du den Plan von vorne an oder beendest ihn. Beenden geht auch im Profil.' },
+  ],
 };
+
+/** The version of each tour: its newest step. */
+const versionOf = (tour: TourId) => Math.max(...STEPS[tour].map((s) => s.since ?? 1));
 
 const KEY = 'members.tour';
 
 export interface ActiveTour { tour: TourId; steps: TourStep[]; index: number }
 
 let active: ActiveTour | null = null;
-let seen: Partial<Record<TourId, boolean>> | null = null;
+/** The version of each tour seen on this phone (`true` from before the versions: 1). */
+let seen: Partial<Record<TourId, boolean | number>> | null = null;
 const listeners = new Set<() => void>();
 const targets = new Map<string, RefObject<ViewRef | null>>();
 const scrollers = new Map<TourId, { ref: RefObject<ScrollRef | null>; y: number }>();
@@ -77,21 +103,33 @@ export function useActiveTour(): ActiveTour | null {
   return useSyncExternalStore(subscribe, () => active, () => active);
 }
 
-async function loadSeen(): Promise<Partial<Record<TourId, boolean>>> {
+async function loadSeen(): Promise<Partial<Record<TourId, boolean | number>>> {
   if (seen) return seen;
   try {
     const raw = await getItem(KEY);
-    seen = raw ? (JSON.parse(raw) as Partial<Record<TourId, boolean>>) : {};
+    seen = raw ? (JSON.parse(raw) as Partial<Record<TourId, boolean | number>>) : {};
   } catch {
     seen = {};
   }
   return seen;
 }
 
+/** The version of a tour seen here, 0 for none. */
+export function seenVersion(value: boolean | number | undefined): number {
+  if (value === true) return 1;
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/** The steps of a tour still to show: all of them the first time, afterwards only the ones newer than the version seen. */
+export function stepsToShow(steps: readonly TourStep[], seenAt: number): TourStep[] {
+  return seenAt === 0 ? [...steps] : steps.filter((s) => (s.since ?? 1) > seenAt);
+}
+
 async function beginIfNew(tour: TourId): Promise<void> {
   const state = await loadSeen();
-  if (active || state[tour]) return;
-  const steps = STEPS[tour].filter((s) => !s.target || targets.has(s.target));
+  const seenAt = seenVersion(state[tour]);
+  if (active || seenAt >= versionOf(tour)) return;
+  const steps = stepsToShow(STEPS[tour], seenAt).filter((s) => !s.target || targets.has(s.target));
   // only the welcome left: there is nothing to show yet
   if (!steps.some((s) => s.target || s.tab !== undefined)) return;
   active = { tour, steps, index: 0 };
@@ -122,7 +160,7 @@ export function endTour(): void {
   if (!active) return;
   const { tour } = active;
   active = null;
-  seen = { ...seen, [tour]: true };
+  seen = { ...seen, [tour]: versionOf(tour) };
   void setItem(KEY, JSON.stringify(seen));
   scrollers.get(tour)?.ref.current?.scrollTo({ y: 0, animated: true });
   emit();

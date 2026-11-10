@@ -127,6 +127,27 @@
                 "minHeight": 110,
                 "initialLayout": "src/widgets/check-in-widget.android.tsx"
               }
+            },
+            {
+              "name": "TongueWidget",
+              "displayName": "Zunge",
+              "description": "Wo ist deine Zunge gerade? Die kleine Erinnerung für den Sperrbildschirm.",
+              "ios": {
+                "supportedFamilies": [
+                  "accessoryCircular",
+                  "accessoryRectangular",
+                  "accessoryInline",
+                  "systemSmall"
+                ],
+                "initialLayout": "src/widgets/tongue-widget.ios.tsx"
+              },
+              "android": {
+                "targetCellWidth": 2,
+                "targetCellHeight": 2,
+                "minWidth": 110,
+                "minHeight": 110,
+                "initialLayout": "src/widgets/tongue-widget.android.tsx"
+              }
             }
           ]
         }

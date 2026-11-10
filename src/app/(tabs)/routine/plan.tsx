@@ -2,14 +2,16 @@
 // or 3 months, how the plan works and the first day. Under way: the day and the way into today's routine on a large picture, today's exercises
 // (each can be swapped for another one of the zone, for today only), all days of the plan at a glance, the photos before and after, a new start
 // and the way out at the very end. At the end: the result, the after photo and the comparison. The goal of a zone plan becomes "Mein Ziel".
+// 10.11.2026: the first time a plan is opened, a tour shows where to tap (lib/tour.ts: 'planStart' before the start, 'plan' afterwards).
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckInCard, CheckInsRow } from '@/components/check-in-parts';
+import { TourTarget } from '@/components/tour';
 import { LinkedText } from '@/components/linked-text';
-import { ExerciseThumb, HeroButton, HeroCard, HeroDone, openRoutine, PhotoSlot } from '@/components/routine-parts';
+import { AngleSwitch, ExerciseThumb, HeroButton, HeroCard, HeroDone, openRoutine, PhotoSlot } from '@/components/routine-parts';
 import { Button, Card, Cover, ErrorView, Loading, MenuGroup, MenuRow, ProgressBar, Screen, Section, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { clock, minutes, plural } from '@/lib/format';
@@ -18,8 +20,11 @@ import { localDay } from '@/lib/nav';
 import { unlockPhotos, usePhotosVisible } from '@/lib/photo-lock';
 import { clearPlanPhotos, goalLabel, planLabel, planState, usePlanPhotos, usePlanStart, useSwaps, withSwaps } from '@/lib/plans';
 import { openCheckIn, useCheckDue } from '@/lib/progress-check';
-import { listPhotos, stepSeconds, useCheckIn, useRoutinePrefs, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
+import {
+  listPhotos, photoInSet, stepSeconds, useCheckIn, useRoutinePrefs, useRoutines, type MemberRoutine, type PhotoAngle, type ProgressPhoto, type RoutineChallenge, type RoutineStep,
+} from '@/lib/routine';
 import { radius, space, usePalette } from '@/lib/theme';
+import { useTourOnFocus } from '@/lib/tour';
 import { useZones, type MemberZoneExercise } from '@/lib/zones';
 
 const camera = (routineId: string, slot: 'start' | 'end') =>
@@ -209,15 +214,20 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   const [goal, chooseGoal] = useState(info?.days ?? 30);
   const [swapping, setSwapping] = useState<string | null>(null);
   const [all, setAll] = useState<ProgressPhoto[]>([]);
-  useFocusEffect(useCallback(() => { setAll(listPhotos()); }, []));
+  const [angle, setAngle] = useState<PhotoAngle>('front');
+  useFocusEffect(useCallback(() => { setAll(listPhotos('all')); }, []));
+  const state = planState(routine);
+  const tour = state === 'open' ? 'planStart' : 'plan';
+  useTourOnFocus(tour, true);
 
   if (!info) return null;
   const isZone = info.kind === 'zone';
-  const state = planState(routine);
   const ch = routine.challenge;
   const today = withSwaps(routine, swaps.steps);
-  const before = all.find((x) => x.name === photos.start);
-  const after = all.find((x) => x.name === photos.end);
+  // the plan keeps the name of the first photo of a set; the sides are found by the set (owner 10.11.2026: front, right and left)
+  const before = photoInSet(all, photos.start, angle) ?? (angle === 'front' ? all.find((x) => x.name === photos.start) : undefined);
+  const after = photoInSet(all, photos.end, angle) ?? (angle === 'front' ? all.find((x) => x.name === photos.end) : undefined);
+  const hasSides = [photos.start, photos.end].some((n) => photoInSet(all, n, 'right') || photoInSet(all, n, 'left'));
   const exercises = (zones.data ?? []).find((z) => z.id === info.zoneId)?.exercises ?? [];
   const lastDay = !!ch && ch.dayNumber !== null && ch.dayNumber >= ch.days;
   const doneToday = routine.stats.doneToday;
@@ -230,7 +240,8 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   const start = () => plan.start.mutate(isZone ? goal : undefined, {
     onSuccess: () => {
       // a before photo taken shortly before, e.g. from the introduction (owner 09.11.2026), stays: the camera does not ask a second time
-      const fresh = !!before && Date.now() - before.takenAt.getTime() < 14 * 86_400_000;
+      const first = photoInSet(all, photos.start, 'front') ?? all.find((x) => x.name === photos.start);
+      const fresh = !!first && Date.now() - first.takenAt.getTime() < 14 * 86_400_000;
       if (!fresh) clearPlanPhotos(routine.id);
       if (isZone) setGoal({ text: info.zoneName ?? routine.title, perWeek: 7, days: goal, startDay: localDay() });
       if (Platform.OS !== 'web' && !fresh) camera(routine.id, 'start');
@@ -263,10 +274,12 @@ function Plan({ routine }: { routine: MemberRoutine }) {
   );
 
   const beforeAfter = (
-    <Section title="Vorher und Nachher">
+    <TourTarget id="plan.photos"><Section title="Vorher und Nachher">
       {(before || after) && !photosVisible ? (
         <Button label="Fotos entsperren" kind="secondary" onPress={() => void unlockPhotos()} />
       ) : (
+        <View style={{ gap: space.s }}>
+        {hasSides ? <AngleSwitch value={angle} onChange={setAngle} /> : null}
         <View style={{ flexDirection: 'row', gap: space.s }}>
           <PhotoSlot
             label="Vorher"
@@ -281,12 +294,13 @@ function Plan({ routine }: { routine: MemberRoutine }) {
             onPress={after ? seePhotos : lastDay || state === 'over' ? () => camera(routine.id, 'end') : undefined}
           />
         </View>
+        </View>
       )}
-    </Section>
+    </Section></TourTarget>
   );
 
   return (
-    <Screen contentStyle={{ gap: space.xl }}>
+    <Screen tour={tour} contentStyle={{ gap: space.xl }}>
       {error ? <Txt color={p.danger}>{errorText(error)}</Txt> : null}
 
       {state === 'open' ? (
@@ -294,15 +308,15 @@ function Plan({ routine }: { routine: MemberRoutine }) {
           <HeroCard imageUrl={picture} minHeight={240} label={planLabel(routine)} title={routine.title} line={`${goalLabel(isZone ? goal : info.days)}, jeden Tag deine Übungen`} />
           {routine.description ? <LinkedText text={routine.description} muted /> : null}
           {isZone && info.longDays ? (
-            <Section title="Dein Ziel">
+            <TourTarget id="plan.goal"><Section title="Dein Ziel">
               <GoalChoice days={info.days} longDays={info.longDays} value={goal} onChange={chooseGoal} />
-            </Section>
+            </Section></TourTarget>
           ) : null}
-          <Section title="So läuft dein Plan">
+          <TourTarget id="plan.how"><Section title="So läuft dein Plan">
             <HowItWorks />
-          </Section>
+          </Section></TourTarget>
           <View style={{ gap: space.xs }}>
-            <Button label="Plan starten" onPress={start} loading={busy} />
+            <TourTarget id="plan.start"><Button label="Plan starten" onPress={start} loading={busy} /></TourTarget>
             {isZone ? (
               <Button
                 label="Nur kurz üben, ohne Plan"
@@ -311,25 +325,25 @@ function Plan({ routine }: { routine: MemberRoutine }) {
               />
             ) : null}
           </View>
-          <Section title="Dein erster Tag" action={<Txt variant="small" muted>{plural(routine.steps.length, 'Übung', 'Übungen')}</Txt>}>
+          <TourTarget id="plan.firstDay"><Section title="Dein erster Tag" action={<Txt variant="small" muted>{plural(routine.steps.length, 'Übung', 'Übungen')}</Txt>}>
             <MenuGroup>
               {routine.steps.map((s) => <ExerciseRow key={s.id} step={s} swapped={false} onRestore={() => undefined} />)}
             </MenuGroup>
-          </Section>
+          </Section></TourTarget>
         </>
       ) : null}
 
       {state === 'running' && ch ? (
         <>
-          <HeroCard imageUrl={picture} minHeight={260} label={planLabel(routine)} title={`Tag ${ch.dayNumber} von ${ch.days}`} line={`${routine.title} · ${plural(ch.doneDays, 'Tag', 'Tage')} erledigt`}>
+          <TourTarget id="plan.hero"><HeroCard imageUrl={picture} minHeight={260} label={planLabel(routine)} title={`Tag ${ch.dayNumber} von ${ch.days}`} line={`${routine.title} · ${plural(ch.doneDays, 'Tag', 'Tage')} erledigt`}>
             <ProgressBar value={(ch.dayNumber ?? 0) / ch.days} style={{ height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.3)' }} />
             {doneToday
               ? <HeroDone text="Heute erledigt. Bis morgen!" />
               : <HeroButton label={`Routine starten · ${minutes(todaySec)}`} icon="play" onPress={() => openRoutine(routine.id)} />}
-          </HeroCard>
+          </HeroCard></TourTarget>
           {due ? <CheckInCard routine={routine} due={due} /> : null}
           {lastDay && doneToday && !after && !routine.progressCheck ? <Button label="Nachher-Foto machen" onPress={() => camera(routine.id, 'end')} /> : null}
-          <Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')}</Txt>}>
+          <TourTarget id="plan.today"><Section title="Heute" action={<Txt variant="small" muted>{plural(today.steps.length, 'Übung', 'Übungen')}</Txt>}>
             <MenuGroup>
               {today.steps.map((s) => (
                 <ExerciseRow
@@ -341,21 +355,21 @@ function Plan({ routine }: { routine: MemberRoutine }) {
                 />
               ))}
             </MenuGroup>
-          </Section>
-          <Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
+          </Section></TourTarget>
+          <TourTarget id="plan.days"><Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
             <PlanDays challenge={ch} done={routine.stats.days} />
-          </Section>
+          </Section></TourTarget>
           {beforeAfter}
-          <CheckInsRow routine={routine} />
+          <TourTarget id="plan.checkins"><CheckInsRow routine={routine} /></TourTarget>
           {routine.description ? (
             <Section title="Über diesen Plan">
               <LinkedText text={routine.description} muted />
             </Section>
           ) : null}
-          <MenuGroup>
+          <TourTarget id="plan.menu"><MenuGroup>
             <MenuRow icon="refresh-outline" label={isZone ? 'Von vorne beginnen' : 'Zurücksetzen und neu beginnen'} onPress={restart} />
             <MenuRow icon="close-circle-outline" label="Routine beenden" onPress={leave} />
-          </MenuGroup>
+          </MenuGroup></TourTarget>
         </>
       ) : null}
 
@@ -367,15 +381,15 @@ function Plan({ routine }: { routine: MemberRoutine }) {
               : !after ? <HeroButton label="Nachher-Foto machen" icon="camera" onPress={() => camera(routine.id, 'end')} /> : null}
           </HeroCard>
           {beforeAfter}
-          <CheckInsRow routine={routine} />
-          <Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
+          <TourTarget id="plan.checkins"><CheckInsRow routine={routine} /></TourTarget>
+          <TourTarget id="plan.days"><Section title="Dein Weg" action={<Txt variant="small" muted>{ch.doneDays} von {ch.days} erledigt</Txt>}>
             <PlanDays challenge={ch} done={routine.stats.days} />
-          </Section>
+          </Section></TourTarget>
           <View style={{ gap: space.m }}>
             <Button label="Noch einmal starten" kind="secondary" onPress={startAgain} loading={busy} />
-            <MenuGroup>
+            <TourTarget id="plan.menu"><MenuGroup>
               <MenuRow icon="close-circle-outline" label="Routine beenden" onPress={leave} />
-            </MenuGroup>
+            </MenuGroup></TourTarget>
           </View>
         </>
       ) : null}

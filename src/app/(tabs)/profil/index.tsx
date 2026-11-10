@@ -1,6 +1,7 @@
 // Profile overview: photo (tap to change or remove — chosen from the phone, cropped square, sent as a 512 px JPEG) in a frame that gets
 // finer with the days practised (lib/frame.ts; the exclamation mark explains it); name, e-mail and member number; the settings in the app;
 // the icon of the app; the introduction again; legal pages of the community in the browser; log out; switch the community.
+// 10.11.2026: "Zungen-Erinnerung" and "Routine beenden" (the plans started, profil/routinen.tsx), both with a step in the tour of the profile.
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
@@ -15,10 +16,11 @@ import { TourTarget } from '@/components/tour';
 import { Button, MenuGroup, MenuRow, Screen, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import { frameOf } from '@/lib/frame';
-import { overallStats } from '@/lib/plans';
+import { overallStats, planState } from '@/lib/plans';
 import { useRoutines } from '@/lib/routine';
 import { useSession } from '@/lib/session';
 import { space, usePalette } from '@/lib/theme';
+import { useTonguePrefs } from '@/lib/tongue';
 import { replayTours, useTourOnFocus } from '@/lib/tour';
 
 export default function ProfileScreen() {
@@ -28,9 +30,12 @@ export default function ProfileScreen() {
   const [busy, setBusy] = useState(false);
   const [framesOpen, setFramesOpen] = useState(false);
   const routines = useRoutines();
+  const tongue = useTonguePrefs();
   useTourOnFocus('profil', !routines.isPending);
   if (!community || !api) return null;
   const hasRoutines = (routines.data?.length ?? 0) > 0;
+  // plans started (running or past their end): they can be ended here too (owner 10.11.2026)
+  const started = (routines.data ?? []).filter((r) => r.plan && planState(r) !== 'open').length;
   const stats = overallStats(routines.data);
   const frame = frameOf(stats);
   const name = me?.displayName || [me?.firstName, me?.lastName].filter(Boolean).join(' ') || me?.email || '';
@@ -110,6 +115,10 @@ export default function ProfileScreen() {
         <MenuRow icon="person-outline" label="Persönliche Daten" onPress={() => router.push('/profil/daten' as Href)} />
         <MenuRow icon="key-outline" label="Passwort ändern" onPress={() => router.push('/profil/passwort' as Href)} />
         <TourTarget id="profil.reminders"><MenuRow icon="alarm-outline" label="Erinnerungen" onPress={() => router.push('/profil/erinnerungen' as Href)} /></TourTarget>
+        <TourTarget id="profil.tongue"><MenuRow icon="happy-outline" label="Zungen-Erinnerung" value={tongue?.on ? 'An' : undefined} onPress={() => router.push('/profil/zunge' as Href)} /></TourTarget>
+        {started > 0 ? (
+          <TourTarget id="profil.routines"><MenuRow icon="stop-circle-outline" label="Routine beenden" onPress={() => router.push('/profil/routinen' as Href)} /></TourTarget>
+        ) : null}
         <MenuRow icon="notifications-outline" label="Benachrichtigungen" onPress={() => router.push('/profil/benachrichtigungen' as Href)} />
         <MenuRow icon="phone-portrait-outline" label="Geräte" onPress={() => router.push('/profil/geraete' as Href)} />
         <MenuRow icon="bag-handle-outline" label="Meine Käufe" onPress={() => router.push('/profil/kaeufe' as Href)} />

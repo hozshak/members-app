@@ -350,7 +350,15 @@ export function useReminderActions(): void {
 
 // ---------- progress photos (only on this phone) ----------
 
-export interface ProgressPhoto { uri: string; name: string; takenAt: Date }
+// Three angles (owner 10.11.2026: "vorher und nachher: front und rechts und links"): one set of photos shares the time in its name, the sides carry
+// "_rechts" / "_links". A name without an angle is a photo from the front (all photos from before).
+export type PhotoAngle = 'front' | 'right' | 'left';
+export const PHOTO_ANGLES: readonly PhotoAngle[] = ['front', 'right', 'left'];
+export const PHOTO_ANGLE_LABELS: Record<PhotoAngle, string> = { front: 'Vorne', right: 'Rechts', left: 'Links' };
+const ANGLE_SUFFIX: Record<PhotoAngle, string> = { front: '', right: '_rechts', left: '_links' };
+
+/** `set`: the time in the name, the same for the photos of one set. */
+export interface ProgressPhoto { uri: string; name: string; takenAt: Date; angle: PhotoAngle; set: string }
 
 function photoDir(): Directory {
   const dir = new Directory(Paths.document, 'fortschritt');
@@ -358,31 +366,41 @@ function photoDir(): Directory {
   return dir;
 }
 
-/** "2026-10-29_081530.jpg" → its date. */
-function dateOf(name: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})\.jpg$/.exec(name);
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])) : null;
+/** "2026-10-29_081530.jpg" / "2026-10-29_081530_rechts.jpg" → its date, angle and set; null for any other file. */
+export function parsePhotoName(name: string): { takenAt: Date; angle: PhotoAngle; set: string } | null {
+  const m = /^((\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2}))(?:_(rechts|links))?\.jpg$/.exec(name);
+  if (!m) return null;
+  const takenAt = new Date(Number(m[2]), Number(m[3]) - 1, Number(m[4]), Number(m[5]), Number(m[6]), Number(m[7]));
+  return { takenAt, angle: m[8] === 'rechts' ? 'right' : m[8] === 'links' ? 'left' : 'front', set: m[1] as string };
 }
 
-/** All photos, oldest first. */
-export function listPhotos(): ProgressPhoto[] {
+/** The photos of one angle, oldest first: by default the ones from the front (what the check-ins and the routine compare); 'all' for every angle. */
+export function listPhotos(angle: PhotoAngle | 'all' = 'front'): ProgressPhoto[] {
   if (Platform.OS === 'web') return [];
   const out: ProgressPhoto[] = [];
   for (const entry of photoDir().list()) {
     if (!(entry instanceof File)) continue;
-    const takenAt = dateOf(entry.name);
-    if (takenAt) out.push({ uri: entry.uri, name: entry.name, takenAt });
+    const parsed = parsePhotoName(entry.name);
+    if (parsed && (angle === 'all' || parsed.angle === angle)) out.push({ uri: entry.uri, name: entry.name, ...parsed });
   }
-  return out.sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime());
+  return out.sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime() || PHOTO_ANGLES.indexOf(a.angle) - PHOTO_ANGLES.indexOf(b.angle));
 }
 
-/** Moves a freshly taken picture (temporary file of the camera) into the photo folder. */
-export function savePhoto(tempUri: string, at = new Date()): ProgressPhoto {
+/** The photo of the same set in another angle (the set of a plan's before photo, say). */
+export function photoInSet(all: readonly ProgressPhoto[], name: string | undefined, angle: PhotoAngle): ProgressPhoto | undefined {
+  const set = name ? parsePhotoName(name)?.set : undefined;
+  return set ? all.find((x) => x.set === set && x.angle === angle) : undefined;
+}
+
+/** Moves a freshly taken picture (temporary file of the camera) into the photo folder; the photos of one set get the same `at`. */
+export function savePhoto(tempUri: string, at = new Date(), angle: PhotoAngle = 'front'): ProgressPhoto {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const name = `${localDay(at)}_${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}.jpg`;
+  const set = `${localDay(at)}_${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
+  const name = `${set}${ANGLE_SUFFIX[angle]}.jpg`;
   const target = new File(photoDir(), name);
+  if (target.exists) target.delete();
   new File(tempUri).copySync(target);
-  return { uri: target.uri, name, takenAt: at };
+  return { uri: target.uri, name, takenAt: at, angle, set };
 }
 
 export function deletePhoto(photo: ProgressPhoto): void {

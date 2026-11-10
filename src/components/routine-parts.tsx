@@ -11,7 +11,9 @@ import { minutes, plural } from '@/lib/format';
 import { localDay } from '@/lib/nav';
 import { closedUntilRecommended, goalLabel, mainRoutine, overallStats, planChoice, planLabel, planState } from '@/lib/plans';
 import { useSession } from '@/lib/session';
-import { stepSeconds, useRoutines, type MemberRoutine, type ProgressPhoto, type RoutineChallenge, type RoutineStep } from '@/lib/routine';
+import {
+  PHOTO_ANGLE_LABELS, PHOTO_ANGLES, stepSeconds, useRoutines, type MemberRoutine, type PhotoAngle, type ProgressPhoto, type RoutineChallenge, type RoutineStep,
+} from '@/lib/routine';
 import { useZones } from '@/lib/zones';
 import { radius, space, usePalette } from '@/lib/theme';
 import { TourTarget } from './tour';
@@ -342,6 +344,29 @@ export function RoutineTodayCard() {
 }
 
 /** One side of "Vorher und Nachher": the photo, or what is to do here. */
+/** Vorne / Rechts / Links: which angle of the photos is shown (owner 10.11.2026). */
+export function AngleSwitch({ value, onChange, dark = false }: { value: PhotoAngle; onChange: (a: PhotoAngle) => void; dark?: boolean }) {
+  const p = usePalette();
+  return (
+    <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 4, padding: 4, borderRadius: 999, backgroundColor: dark ? 'rgba(255,255,255,0.16)' : p.surfaceAlt }}>
+      {PHOTO_ANGLES.map((a) => {
+        const on = a === value;
+        return (
+          <Pressable
+            key={a}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            onPress={() => onChange(a)}
+            style={{ flex: 1, minHeight: 36, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? (dark ? '#FFFFFF' : p.surface) : 'transparent' }}
+          >
+            <Txt variant="small" color={on ? (dark ? '#111111' : p.text) : dark ? '#FFFFFF' : p.textMuted} style={{ fontWeight: on ? '700' : '500' }}>{PHOTO_ANGLE_LABELS[a]}</Txt>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function PhotoSlot({ label, photo, empty, onPress }: { label: string; photo: ProgressPhoto | undefined; empty: { icon: keyof typeof Ionicons.glyphMap; text: string }; onPress?: () => void }) {
   const p = usePalette();
   const when = photo?.takenAt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });

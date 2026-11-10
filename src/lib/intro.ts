@@ -13,8 +13,11 @@ export interface ProgrammeIntroImage { label: string; url: string }
 export interface ProgrammeIntroLink { kind: 'plan' | 'photo' | 'category' | 'url'; label: string; target: string }
 /** `images` and `link` are missing on software versions before 09.11.2026. */
 export interface ProgrammeIntroPage { title: string; text: string; images?: ProgrammeIntroImage[]; link?: ProgrammeIntroLink | null }
+/** The programme's row in "So startest du" (10.11.2026): '' / null = the product's title, "Hier fängst du an" and its picture. Missing on older software. */
+export interface ProgrammeIntroStartRow { title: string; text: string; imageUrl: string | null }
 export interface ProgrammeIntro {
   title: string; lead: string; leadImages?: ProgrammeIntroImage[]; question: string; levels: ProgrammeIntroLevel[]; pages: ProgrammeIntroPage[]; closing: string;
+  startRow?: ProgrammeIntroStartRow;
 }
 
 /**

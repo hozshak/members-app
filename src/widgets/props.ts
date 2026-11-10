@@ -34,3 +34,10 @@ export interface CheckInWidgetProps {
   accentDeep: string;
   onAccent: string;
 }
+
+/** The tongue widget (owner 10.11.2026, "Zungen-Erinnerung"): only the colours of the community; the app sends them (lib/widget.ts). */
+export interface TongueWidgetProps {
+  accent: string;
+  accentDeep: string;
+  onAccent: string;
+}

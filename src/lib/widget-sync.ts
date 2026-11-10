@@ -5,7 +5,7 @@ import { mainRoutine, overallStats, useReloadOnNewDay } from './plans';
 import { checkInOutlook, useCheckIns, useCheckInSnooze } from './progress-check';
 import { stepSeconds, useRoutines } from './routine';
 import { useSession } from './session';
-import { checkInTimeline, clearCheckInWidget, clearRoutineWidget, sendCheckInToWidget, sendRoutineToWidget } from './widget';
+import { checkInTimeline, clearCheckInWidget, clearRoutineWidget, sendCheckInToWidget, sendRoutineToWidget, sendTongueToWidget } from './widget';
 
 /** From this hour the widget warns that today is still open. */
 const RISK_HOUR = 20;
@@ -20,6 +20,8 @@ export function useRoutineWidgetSync(): void {
   const days = stats.days;
   const loaded = q.data !== undefined;
   const accent = community?.accentColor;
+  // the tongue widget takes the colour of the community
+  useEffect(() => { sendTongueToWidget(accent ?? undefined); }, [accent]);
   useEffect(() => {
     if (!loaded) return;
     if (!routine) {
