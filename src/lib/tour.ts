@@ -17,10 +17,20 @@ type ScrollRef = ComponentRef<typeof ScrollView>;
 export type TourId = 'start' | 'inhalte' | 'routine' | 'profil' | 'plan' | 'planStart';
 
 /** `target`: a TourTarget on the screen; `tab`: an item of the tab bar; neither: a card in the middle. `since`: the version of the tour it came with (1). */
-export interface TourStep { target?: string; tab?: number; title: string; text: string; since?: number }
+export interface TourStep { target?: string; tab?: TabRoute; title: string; text: string; since?: number }
 
 /** The tabs in the order of the tab bar. */
-export const TAB_ROUTES = ['/', '/routine', '/inhalte', '/profil'] as const;
+export type TabRoute = '/' | '/routine' | '/inhalte' | '/gruppe' | '/profil';
+const ALL_TABS: readonly TabRoute[] = ['/', '/routine', '/inhalte', '/gruppe', '/profil'];
+// "Gruppe" (10.11.2026) is a tab only where the community has the group switched on: the tab bar tells (setGroupTab)
+let groupTab = false;
+export function setGroupTab(on: boolean): void {
+  groupTab = on;
+}
+/** The tabs in the order of the tab bar now. */
+export function tabRoutes(): readonly TabRoute[] {
+  return groupTab ? ALL_TABS : ALL_TABS.filter((r) => r !== '/gruppe');
+}
 
 const STEPS: Record<TourId, TourStep[]> = {
   start: [
@@ -29,9 +39,10 @@ const STEPS: Record<TourId, TourStep[]> = {
     { target: 'start.intro', title: 'So startest du', text: 'Für jedes Programm steht hier, womit du anfängst. Tippe drauf, dann öffnet sich die Einführung.' },
     { target: 'start.routine', title: 'Deine Routine heute', text: 'Ein Fingertipp, und du bist bei deinen Übungen für heute.' },
     { target: 'start.progress', title: 'Dein Fortschritt', text: 'So weit bist du in deinen Programmen und in der Routine. Tippe drauf, und du bist direkt dort.' },
-    { tab: 1, title: 'Routine', text: 'Hier ist dein tägliches Training: Übungen zum Mitmachen und deine Fotos.' },
-    { tab: 2, title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
-    { tab: 3, title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein, beendest eine Routine und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
+    { tab: '/routine', title: 'Routine', text: 'Hier ist dein tägliches Training: Übungen zum Mitmachen und deine Fotos.' },
+    { tab: '/inhalte', title: 'Inhalte', text: 'Hier sind deine Programme mit allen Videos und deine Downloads.' },
+    { tab: '/gruppe', title: 'Gruppe', text: 'Hier tauschst du dich mit den anderen aus: Fragen, Fortschritte, Motivation.', since: 2 },
+    { tab: '/profil', title: 'Profil', text: 'Hier stellst du deine Erinnerungen ein, beendest eine Routine und siehst deinen Rahmen. Tippe auf einen Bereich, dann zeige ich ihn dir.' },
   ],
   inhalte: [
     { title: 'Das erste Mal hier?', text: 'Du bist jetzt das erste Mal im Bereich „Inhalte“. Ich führe dich einmal rum.' },
@@ -129,7 +140,8 @@ async function beginIfNew(tour: TourId): Promise<void> {
   const state = await loadSeen();
   const seenAt = seenVersion(state[tour]);
   if (active || seenAt >= versionOf(tour)) return;
-  const steps = stepsToShow(STEPS[tour], seenAt).filter((s) => !s.target || targets.has(s.target));
+  const tabs = tabRoutes();
+  const steps = stepsToShow(STEPS[tour], seenAt).filter((s) => (!s.target || targets.has(s.target)) && (!s.tab || tabs.includes(s.tab)));
   // only the welcome left: there is nothing to show yet
   if (!steps.some((s) => s.target || s.tab !== undefined)) return;
   active = { tour, steps, index: 0 };

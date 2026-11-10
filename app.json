@@ -166,7 +166,8 @@
           }
         ]
       ],
-      "expo-mail-composer"
+      "expo-mail-composer",
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true,

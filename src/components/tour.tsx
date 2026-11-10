@@ -10,13 +10,12 @@ import { usePulse } from '@/lib/motion';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 import {
-  endTour, measureTarget, nextTourStep, scrollTourBy, TAB_ROUTES, useActiveTour, useTourTargetRef, type ActiveTour, type TourId, type TourStep,
+  endTour, measureTarget, nextTourStep, scrollTourBy, tabRoutes, useActiveTour, useTourTargetRef, type ActiveTour, type TourId, type TourStep,
 } from '@/lib/tour';
 import { Button, Txt } from './ui';
 
 /** A rough height of the card, to know whether it fits next to the thing. */
 const CARD_H = 240;
-const TAB_COUNT = TAB_ROUTES.length;
 const TAB_CIRCLE = 72;
 
 interface Hole { x: number; y: number; w: number; h: number; r: number }
@@ -35,7 +34,7 @@ export function TourTarget({ id, style, children }: { id: string; style?: StyleP
 function tabHole(i: number, { W, H, bottom }: Frame): Hole {
   const floating = Platform.OS === 'ios' && parseInt(String(Platform.Version), 10) >= 26;
   const margin = floating ? 31 : 0;
-  const cx = margin + ((W - 2 * margin) * (i + 0.5)) / TAB_COUNT;
+  const cx = margin + ((W - 2 * margin) * (i + 0.5)) / tabRoutes().length;
   const cy = floating ? H - 52 : H - bottom - (Platform.OS === 'android' ? 40 : 25);
   return { x: cx - TAB_CIRCLE / 2, y: cy - TAB_CIRCLE / 2, w: TAB_CIRCLE, h: TAB_CIRCLE, r: TAB_CIRCLE / 2 };
 }
@@ -44,7 +43,7 @@ const wait = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms);
 
 /** Where the light falls: brings the thing into view first, so that the card fits next to it. */
 async function locate(step: TourStep, tour: TourId, frame: Frame): Promise<Hole | null> {
-  if (step.tab !== undefined) return tabHole(step.tab, frame);
+  if (step.tab !== undefined) return tabHole(Math.max(0, tabRoutes().indexOf(step.tab)), frame);
   if (!step.target) return null;
   let box = await measureTarget(step.target);
   if (!box) return null;
@@ -114,7 +113,7 @@ function Spot({ active }: { active: ActiveTour }) {
     ? { top: 0, bottom: 0, justifyContent: 'center' }
     : below ? { top: hole.y + hole.h + space.m } : { bottom: H - hole.y + space.m };
   const caretLeft = hole ? Math.max(radius.xl, Math.min(W - 2 * edge - radius.xl - 16, hole.x + hole.w / 2 - edge - 8)) : 0;
-  const tabRoute = step.tab !== undefined ? TAB_ROUTES[step.tab] : null;
+  const tabRoute = step.tab ?? null;
   const title = step.title.replace('{name}', community?.name ?? 'deinem Memberbereich');
 
   return (
