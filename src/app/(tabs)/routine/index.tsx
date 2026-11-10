@@ -7,6 +7,8 @@
 // "Gezielt üben" and the own goal are out of the app (owner 06.11.2026); their screens (routine/zone.tsx, routine/ziel.tsx) are no longer linked.
 // Several recommended plans, e.g. of two programmes, and none started (owner 09.11.2026): "Womit fängst du an?" instead of today's picture, one card per
 // plan with its programme; the plans not chosen wait until the chosen one is done (lib/plans.ts planChoice, waitingFor).
+// "Gezielt üben" back (owner 10.11.2026: "zeige alle Routinen für die mit Tags"): every zone plan the member may see, as a card to open and start, without
+// waiting for the recommended plan; the team sees the same (lib/routine.ts leaves out what no member can see).
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
@@ -222,11 +224,16 @@ function PlanCard({ routine, waiting }: { routine: MemberRoutine; waiting: Membe
     <Card onPress={() => openPlan(routine.id)} accessibilityLabel={`${planLabel(routine)}: ${routine.title}`} style={{ padding: space.l, gap: space.s }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
         <Ionicons name={state === 'over' ? 'trophy' : 'ribbon'} size={18} color={p.accent} />
-        <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>{routine.skipped ? 'Für den Einstieg' : planLabel(routine)}</Txt>
+        <Txt variant="caption" color={p.accent} style={{ flex: 1 }}>
+          {/* under the heading "Gezielt üben" its zone says more than the word again */}
+          {routine.skipped ? 'Für den Einstieg' : state === 'open' && routine.plan?.kind === 'zone' && routine.plan.zoneName ? routine.plan.zoneName : planLabel(routine)}
+        </Txt>
         <Ionicons name="chevron-forward" size={18} color={p.textMuted} />
       </View>
       <Txt variant="heading">{routine.title}</Txt>
-      {state === 'running' && ch ? (
+      {state === 'open' && routine.plan?.kind === 'zone' ? (
+        <Txt variant="small" muted>{goalLabel(routine.plan.days)} · starte, wann du willst</Txt>
+      ) : state === 'running' && ch ? (
         <>
           <ProgressBar value={(ch.dayNumber ?? 0) / ch.days} />
           <Txt variant="small" muted>Tag {ch.dayNumber} von {ch.days} · {ch.doneDays} erledigt</Txt>
@@ -417,6 +424,15 @@ export default function RoutineScreen() {
   const choice = planChoice(q.data);
   const plans = q.data.filter((r) => r.plan && r.id !== main?.id && (r.plan.kind === 'recommended' || planState(r) !== 'open') && !choice?.some((c) => c.id === r.id));
   const showWay = !!main && (planState(main) === 'running' || !main.plan || stats.totalDays > 0);
+  // "Gezielt üben": the zone plans not started yet (started ones are among `plans`)
+  const zonePlans = q.data.filter((r) => r.plan?.kind === 'zone' && planState(r) === 'open' && r.id !== main?.id && r.steps.length > 0);
+  const zoneSection = zonePlans.length > 0 ? (
+    <Section title="Gezielt üben">
+      <View style={{ gap: space.m }}>
+        {zonePlans.map((r) => <PlanCard key={r.id} routine={r} waiting={null} />)}
+      </View>
+    </Section>
+  ) : null;
 
   return (
     <Screen tour="routine" onRefresh={() => void q.refetch()} refreshing={q.isRefetching} contentStyle={{ paddingTop: insets.top + space.l, gap: space.xl }}>
@@ -445,9 +461,14 @@ export default function RoutineScreen() {
         <>
           <Card style={{ padding: space.xl, gap: space.s }}>
             <Ionicons name="flame-outline" size={32} color={p.accent} />
-            <Txt variant="title">Noch keine Routine</Txt>
-            <Txt muted>Sobald {community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier, mit Timer und Erinnerung.</Txt>
+            <Txt variant="title">{zonePlans.length > 0 ? 'Such dir deinen Plan aus' : 'Noch keine Routine'}</Txt>
+            <Txt muted>
+              {zonePlans.length > 0
+                ? 'Wähle unten einen Bereich und starte deinen Plan. Er sagt dir jeden Tag, was dran ist.'
+                : `Sobald ${community?.name ?? 'dein Memberbereich'} eine tägliche Routine für dich anlegt, findest du sie hier, mit Timer und Erinnerung.`}
+            </Txt>
           </Card>
+          {zoneSection}
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
         </>
       ) : (
@@ -457,6 +478,7 @@ export default function RoutineScreen() {
           <CheckInSuggestion routine={main} />
           {main.plan && planState(main) === 'over' ? null : <ReminderHint routine={main} />}
           {plans.map((r) => <PlanCard key={r.id} routine={r} waiting={waitingFor(q.data, r)} />)}
+          {zoneSection}
           {!main.plan || planState(main) === 'running' ? <TourTarget id="routine.check"><TodayChecklist routine={today} /></TourTarget> : null}
           <TourTarget id="routine.photos"><PhotosCard /></TourTarget>
           {main.plan ? null : <ChallengeBlock routine={main} />}

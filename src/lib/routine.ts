@@ -55,6 +55,8 @@ export interface MemberRoutine {
   productIds?: Id[];
   /** Set here, never by the server: a recommended plan the member skips, see skippedByIntro. */
   skipped?: boolean;
+  /** A member can see it at all (software 10.11.2026; missing on older software = yes). The team sees only these (owner: "alle Routinen für die mit Tags"). */
+  memberVisible?: boolean;
 }
 
 /**
@@ -109,7 +111,8 @@ export function useRoutines() {
         const answer = await api.get<{ items: MemberRoutine[]; reminderTexts?: unknown; appTexts?: unknown }>(`/api/member/routines?day=${localDay()}`);
         setReminderTexts(answer.reminderTexts);
         setAppTexts(answer.appTexts);
-        return answer.items;
+        // the team gets every routine; it sees what members with the tags see (owner 10.11.2026), not the unfinished ones without a tag
+        return answer.items.filter((r) => r.memberVisible !== false);
       } catch (err) {
         // a community whose software has no routines yet answers 404: nothing to show, no error
         if (err instanceof ApiError && err.status === 404) {
