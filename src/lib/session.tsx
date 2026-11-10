@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError, createApi, normalizeBaseUrl, type ApiClient } from './api';
 import { clearExerciseVideos } from './exercise-videos';
+import { forgetGroupPush } from './push';
 import { getItem, removeItem, setItem } from './storage';
 import type { Bootstrap, LoginResponse, Me } from './types';
 import { clearCheckInWidget, clearRoutineWidget } from './widget';
@@ -123,6 +124,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     if (api && tokens.get()) {
+      await forgetGroupPush(api);
       try { await api.post('/api/auth/logout'); } catch { /* the session ends locally anyway */ }
     }
     await endSession();

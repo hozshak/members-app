@@ -1,20 +1,22 @@
 // The group as a chat (owner 10.11.2026): the newest message at the bottom, older ones load when scrolling up; asked again every few seconds while it is
 // on screen. A pinned message stands on top. A long press opens the menu: react, answer, copy, report, block (members' content, App Review 1.2), and for
 // the team: pin, delete, mute or ban the author, look at reports. Writing: text for everybody who may; pictures, GIFs and polls for the team (the "+").
+// The bell (push, software migration 0120): all messages · the team and answers to me · none; entering the chat asks the phone for permission once.
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
 import {
-  flatMessages, GROUP_MUTE_HOURS, GROUP_POLL_OPTIONS_MAX, GROUP_REACTIONS, useGroupActions, useGroupMessages, type GroupInfo, type GroupMessage,
+  flatMessages, GROUP_MUTE_HOURS, GROUP_POLL_OPTIONS_MAX, GROUP_REACTIONS, useGroupActions, useGroupMessages, type GroupInfo, type GroupMessage, type GroupNotify,
 } from '@/lib/group';
+import { registerGroupPush, setGroupChatOpen } from '@/lib/push';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 import { MessageBubble } from './message';
@@ -130,6 +132,64 @@ function MessageSheet({ m, info, onClose, onReply }: { m: GroupMessage; info: Gr
   );
 }
 
+const NOTIFY_OPTIONS: { mode: GroupNotify; icon: keyof typeof Ionicons.glyphMap; label: string; help: string }[] = [
+  { mode: 'all', icon: 'notifications', label: 'Alle Nachrichten', help: 'Jede neue Nachricht in der Gruppe.' },
+  { mode: 'coach', icon: 'notifications-outline', label: 'Nur Coach und Antworten an mich', help: 'Wenn das Team schreibt oder jemand dir antwortet.' },
+  { mode: 'off', icon: 'notifications-off-outline', label: 'Aus', help: 'Keine Mitteilungen. Neue Nachrichten zeigt der Tab trotzdem.' },
+];
+const notifyIcon = (mode: GroupNotify) => NOTIFY_OPTIONS.find((o) => o.mode === mode)?.icon ?? 'notifications-outline';
+
+/** The bell: what of the group reaches the phone. */
+function NotifySheet({ mode, onClose }: { mode: GroupNotify; onClose: () => void }) {
+  const p = usePalette();
+  const insets = useSafeAreaInsets();
+  const { api } = useSession();
+  const act = useGroupActions();
+  const pick = (next: GroupNotify) => {
+    onClose();
+    act.notify.mutate(next, {
+      onError: (err) => Alert.alert('Nicht gespeichert', errorText(err)),
+      onSuccess: () => {
+        if (next === 'off' || !api) return;
+        void registerGroupPush(api, true).then((state) => {
+          if (state !== 'denied') return;
+          Alert.alert('Mitteilungen sind aus', 'Erlaube der App in den Einstellungen deines Handys, dir Mitteilungen zu schicken.', [
+            { text: 'Später', style: 'cancel' },
+            { text: 'Einstellungen öffnen', onPress: () => void Linking.openSettings() },
+          ]);
+        });
+      },
+    });
+  };
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Schließen" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: insets.bottom + space.m, paddingTop: space.l, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: p.surface, gap: space.xs }}>
+        <Txt variant="heading" style={{ paddingHorizontal: space.xl, paddingBottom: space.s }}>Mitteilungen aufs Handy</Txt>
+        {NOTIFY_OPTIONS.map((o) => {
+          const on = o.mode === mode;
+          return (
+            <Pressable
+              key={o.mode}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              onPress={() => pick(o.mode)}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.m, minHeight: 60, paddingHorizontal: space.xl, paddingVertical: space.s, backgroundColor: pressed ? p.surfaceAlt : 'transparent' })}
+            >
+              <Ionicons name={o.icon} size={22} color={on ? p.accent : p.text} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt style={{ fontWeight: on ? '700' : '400' }}>{o.label}</Txt>
+                <Txt variant="small" muted>{o.help}</Txt>
+              </View>
+              {on ? <Ionicons name="checkmark" size={22} color={p.accent} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </Modal>
+  );
+}
+
 /** The team makes a poll: question, two to six answers, one or several choices. */
 function PollEditor({ onClose }: { onClose: () => void }) {
   const p = usePalette();
@@ -190,9 +250,20 @@ export function GroupChat({ info }: { info: GroupInfo }) {
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => {
     setFocused(true);
-    return () => setFocused(false);
+    setGroupChatOpen(true);
+    return () => {
+      setFocused(false);
+      setGroupChatOpen(false);
+    };
   }, []));
   const q = useGroupMessages(focused);
+  // push: in the chat the phone asks once for permission (unless the member switched the bell off)
+  const notify: GroupNotify = info.notify ?? 'coach';
+  const wantsPush = notify !== 'off';
+  useEffect(() => {
+    if (api && wantsPush) void registerGroupPush(api, true);
+  }, [api, wantsPush]);
+  const [bellOpen, setBellOpen] = useState(false);
   const act = useGroupActions();
   const messages = useMemo(() => flatMessages(q.data), [q.data]);
   const [text, setText] = useState('');
@@ -308,6 +379,17 @@ export function GroupChat({ info }: { info: GroupInfo }) {
       <View style={{ paddingTop: insets.top + space.s, paddingHorizontal: space.l, paddingBottom: space.s, gap: space.s, borderBottomWidth: 1, borderBottomColor: p.line, backgroundColor: p.bg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
           <Txt variant="display" style={{ flex: 1 }} numberOfLines={1}>{info.name}</Txt>
+          {Platform.OS !== 'web' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Mitteilungen: ${NOTIFY_OPTIONS.find((o) => o.mode === notify)?.label ?? ''}`}
+              onPress={() => setBellOpen(true)}
+              hitSlop={6}
+              style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? p.surfaceAlt : 'transparent' })}
+            >
+              <Ionicons name={notifyIcon(notify)} size={24} color={notify === 'off' ? p.textMuted : p.accent} />
+            </Pressable>
+          ) : null}
           {info.isTeam && info.openReports > 0 ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.s, paddingVertical: 4, borderRadius: 999, backgroundColor: p.danger }}>
               <Ionicons name="flag" size={12} color="#FFFFFF" />
@@ -354,6 +436,7 @@ export function GroupChat({ info }: { info: GroupInfo }) {
       {composer}
       {sheet ? <MessageSheet m={sheet} info={info} onClose={() => setSheet(null)} onReply={() => setReplyTo(sheet)} /> : null}
       {pollOpen ? <PollEditor onClose={() => setPollOpen(false)} /> : null}
+      {bellOpen ? <NotifySheet mode={notify} onClose={() => setBellOpen(false)} /> : null}
       {viewer && api ? (
         <Modal visible animationType="fade" onRequestClose={() => setViewer(null)} statusBarTranslucent>
           <Pressable accessibilityRole="button" accessibilityLabel="Bild schließen" onPress={() => setViewer(null)} style={{ flex: 1, backgroundColor: '#000' }}>

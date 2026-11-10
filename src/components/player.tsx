@@ -21,13 +21,16 @@
 // 10.11.2026 (owner: "beim Vor- oder Zurückspulen hängt das immer … das Video muss gar nicht hängen"): the token is renewed in time also while paused (a
 // pause used to start the count again, and a jump after it asked with an expired address); a lesson whose address fails reloads by itself at the same
 // place before it says anything. The routine's video gets "10 Sekunden vor" and a bar to tap or drag.
+// 10.11.2026 (owner: "Videoschutz, dass keine Bildschirmaufnahme machen darf"): while a video is on screen the phone allows neither a screen recording
+// nor a screenshot (expo-screen-capture: iOS hides the picture in a recording, Android blacks out the window); another screen allows it again.
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useIsFocused } from 'expo-router';
 import { useEvent, useEventListener } from 'expo';
+import * as ScreenCapture from 'expo-screen-capture';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorText } from '@/lib/api';
 import { useApi } from '@/lib/session';
@@ -115,6 +118,15 @@ export function LessonPlayer({
   }, [onFileFailed]);
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
+  // no recording and no screenshot while this video is on screen (each player its own key: one leaving does not open it for another)
+  const captureKey = `video-${useId()}`;
+  useEffect(() => {
+    if (Platform.OS === 'web' || !focused) return;
+    void ScreenCapture.preventScreenCaptureAsync(captureKey).catch(() => undefined);
+    return () => {
+      void ScreenCapture.allowScreenCaptureAsync(captureKey).catch(() => undefined);
+    };
+  }, [focused, captureKey]);
   const player = useVideoPlayer(null, (p) => {
     p.loop = coach;
     // the routine's bar follows the video closely

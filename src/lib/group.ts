@@ -30,7 +30,11 @@ export interface GroupInfo {
   subscription: { store: 'apple' | 'google'; productId: string; expiresAt: UnixSec | null; autoRenew: boolean; trial: boolean } | null;
   products: { apple: { monthly: string; yearly: string }; google: { productId: string } };
   purchaseToken: string; unread: number; pinned: GroupMessage | null; openReports: number;
+  /** What of the group reaches the phone (software migration 0120; an older community does not say: 'coach'). */
+  notify?: GroupNotify;
 }
+
+export type GroupNotify = 'all' | 'coach' | 'off';
 
 export const groupKey = ['group'] as const;
 export const groupMessagesKey = ['group', 'messages'] as const;
@@ -119,6 +123,10 @@ export function useGroupActions() {
       mutationFn: (v: { userId: Id; muteHours?: number; ban?: boolean }) =>
         api.post(`/api/member/group/members/${v.userId}/moderate`, { ...(v.muteHours !== undefined ? { muteHours: v.muteHours } : {}), ...(v.ban !== undefined ? { ban: v.ban } : {}) }),
       onSuccess: refresh,
+    }),
+    notify: useMutation({
+      mutationFn: (mode: GroupNotify) => api.put('/api/member/group/notify', { mode }),
+      onSuccess: (_r, mode) => qc.setQueryData<GroupInfo | null>(groupKey, (info) => info && { ...info, notify: mode }),
     }),
     acceptRules: useMutation({ mutationFn: () => api.post('/api/member/group/rules'), onSuccess: refresh }),
     markRead: useMutation({

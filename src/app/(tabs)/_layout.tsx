@@ -6,6 +6,8 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import { useEffect } from 'react';
 import { TourOverlay } from '@/components/tour';
 import { useGroupInfo } from '@/lib/group';
+import { useGroupPushSync, useOpenGroupFromPush } from '@/lib/push';
+import { useSession } from '@/lib/session';
 import { setGroupTab } from '@/lib/tour';
 import { useReminderSync } from '@/lib/plans';
 import { useReminderActions } from '@/lib/routine';
@@ -21,6 +23,10 @@ export default function TabsLayout() {
   const group = useGroupInfo(60_000);
   const showGroup = !!group.data;
   useEffect(() => { setGroupTab(showGroup); }, [showGroup]);
+  // push (10.11.2026): the phone stays registered while the member is in the group; a tap on a push opens it
+  const { api } = useSession();
+  useGroupPushSync(api, group.data?.access === 'open', !!group.data && group.data.notify !== 'off');
+  useOpenGroupFromPush(showGroup);
   return (
     <>
     <NativeTabs tintColor={p.accent} backgroundColor={p.surface} labelStyle={{ selected: { color: p.accent } }}>

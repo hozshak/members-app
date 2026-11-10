@@ -14,6 +14,7 @@ import { setAppTexts } from './app-texts';
 import { useIntroStates, type IntroState } from './intro';
 import { localDay } from './nav';
 import { DEFAULT_REMINDER_TEXTS, plannedReminders, readReminderTexts } from './reminder-texts';
+import { isGroupPush, openGroupFromPush } from './push';
 import { useApi } from './session';
 import { getItem, setItem } from './storage';
 import type { Id } from './types';
@@ -324,11 +325,16 @@ async function cancelSnooze(): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(SNOOZE_ID).catch(() => undefined);
 }
 
-/** A button of the reminder ("In 1 Stunde"): the same notification again later. A tap on the notification itself opens the routine. */
+/** A button of the reminder ("In 1 Stunde"): the same notification again later. A tap on the notification itself opens the routine; one of the group the group. */
 export function useReminderActions(): void {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const handle = (response: Notifications.NotificationResponse) => {
+      // a message of the group (lib/push.ts) opens the group
+      if (isGroupPush(response.notification)) {
+        openGroupFromPush();
+        return;
+      }
       const minutes = SNOOZE_ACTION.exec(response.actionIdentifier)?.[1];
       if (minutes) {
         const { title, body } = response.notification.request.content;

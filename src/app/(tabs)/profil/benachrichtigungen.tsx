@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, View } from 'react-native';
 import { ErrorView, Loading, MenuGroup, Screen, ToggleRow, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
+import { useGroupInfo } from '@/lib/group';
 import { useProfile } from '@/lib/queries';
 import { useApi } from '@/lib/session';
 import { space } from '@/lib/theme';
@@ -13,6 +14,7 @@ export default function NotificationsScreen() {
   const api = useApi();
   const qc = useQueryClient();
   const q = useProfile();
+  const group = useGroupInfo();
   const save = useMutation({
     mutationFn: (patch: Partial<Pick<Profile, 'notifyUnlock' | 'notifyReply'>>) => api.patch<Profile>('/api/profile', patch),
     onMutate: async (patch) => {
@@ -51,7 +53,9 @@ export default function NotificationsScreen() {
           />
         </MenuGroup>
       </View>
-      <Txt variant="small" muted>Mitteilungen direkt aufs Handy kommen mit dem nächsten Update der App.</Txt>
+      {group.data?.access === 'open' ? (
+        <Txt variant="small" muted>Mitteilungen aufs Handy aus der Gruppe „{group.data.name}“ stellst du dort oben über die Glocke ein.</Txt>
+      ) : null}
     </Screen>
   );
 }

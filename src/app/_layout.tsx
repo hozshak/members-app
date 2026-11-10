@@ -8,15 +8,19 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+import { isGroupPush, showWhileOpen } from '@/lib/push';
 import { SessionProvider, useSession } from '@/lib/session';
 import { usePalette } from '@/lib/theme';
 
 void SplashScreen.preventAutoHideAsync();
 
-// the routine reminder (a local notification) also shows while the app is open
+// the routine reminder (a local notification) also shows while the app is open; a message of the group too, unless the chat is on screen
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+    handleNotification: async (n) => {
+      const show = showWhileOpen(n);
+      return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show && isGroupPush(n), shouldSetBadge: false };
+    },
   });
 }
 
