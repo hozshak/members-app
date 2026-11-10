@@ -39,7 +39,7 @@ export default function CommunityScreen() {
       <Screen contentStyle={{ paddingTop: space.xxl * 2 }}>
         <View style={{ gap: space.s }}>
           <Pressable onLongPress={__DEV__ ? () => setDevField(true) : undefined} accessible={false}>
-            <Txt variant="caption" color={p.accent}>Members</Txt>
+            <Txt variant="caption" color={p.accent}>THFM</Txt>
           </Pressable>
           <Txt variant="display">Wo bist du Mitglied?</Txt>
           <Txt muted>Wähle deinen Memberbereich. Danach meldest du dich mit derselben E-Mail und demselben Passwort an wie auf der Website.</Txt>
