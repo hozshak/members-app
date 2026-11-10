@@ -22,7 +22,8 @@ export function planState(routine: MemberRoutine): PlanState {
   return ch.completed || ch.dayNumber > ch.days ? 'over' : 'running';
 }
 
-export const planLabel = (routine: MemberRoutine) => routine.plan?.label || (routine.plan?.kind === 'zone' ? 'Gezielt üben' : 'Empfohlen für dich');
+// a zone's plan is "Routine" for the member (owner 10.11.2026: "warum wieder Gezielt üben, ich wollte die Dinge als Routine haben")
+export const planLabel = (routine: MemberRoutine) => routine.plan?.label || (routine.plan?.kind === 'zone' ? 'Routine' : 'Empfohlen für dich');
 
 /** 90 → "3 Monate", 30 → "30 Tage". */
 export const goalLabel = (days: number) => (days % 30 === 0 && days >= 60 ? `${days / 30} Monate` : `${days} Tage`);
