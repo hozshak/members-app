@@ -394,10 +394,11 @@ export function LessonPlayer({
       ) : null}
       {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
       {waitingView}
-      {!coach && !failed ? (
+      {/* "Video vergrößern" like in "Inhalte", also in the routine (not on the very small picture beside the mirror) */}
+      {!mini && !failed ? (
         <RoundIcon icon="expand" label="Video vergrößern" onPress={toggleLarge} style={{ position: 'absolute', right: space.s, top: space.s }} />
       ) : null}
-      {!coach ? (
+      {!mini ? (
         <Modal visible={large} animationType="fade" onRequestClose={toggleLarge} statusBarTranslucent>
           <View style={{ flex: 1, backgroundColor: '#000000' }}>
             <VideoView

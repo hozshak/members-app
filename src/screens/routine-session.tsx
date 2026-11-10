@@ -2,7 +2,8 @@
 // at every change (no voice, no extra sounds; the video always shows and has its sound: owner 04.11.2026), the screen stays on. What comes next is written below.
 // With the mirror on, mirror and video stand side by side in the same size (a landscape video above the mirror) and the countdown
 // sits on the seam; each picture can be enlarged (the other one becomes a small picture in the corner) and made small
-// again. The countdown of an exercise with a video lasts as long as the video, which pauses with it and starts at once. When it has played
+// again (10.11.2026: the video itself is the player of "Inhalte" — the phone's controls and "Video vergrößern", nothing of its own on top). The
+// countdown of an exercise with a video lasts as long as the video, which pauses with it and starts at once. When it has played
 // through, nothing moves on (owner 05.11.2026, a short video would be over before anyone could follow it): the video starts again by itself for
 // as long as the member likes, and only "Fertig" at the bottom ends the exercise. Without a video, and in `practice`, the countdown goes on by
 // itself. A short video lies on the phone once it has been loaded (lib/exercise-videos.ts) and then also lies ready behind the running one; every other one
@@ -103,15 +104,17 @@ function stageLayout(o: { width: number; screenH: number; videoAspect: number; v
   return { height: single.height, video: video ? single : null, mirror: mirror ? single : null, pip: null };
 }
 
-function Pane({ rect, label, pip, expanded, onExpand, children }: {
+function Pane({ rect, label, pip, expanded, onExpand, bare = false, children }: {
   rect: Rect; label: string; pip: boolean; expanded: boolean; onExpand: () => void; children: ReactNode;
+  /** The video (10.11.2026, owner: "Videoplayer von Routine genau wie bei Inhalte"): no label and no button of its own on top, only the player's. */
+  bare?: boolean;
 }) {
   return (
     <View style={{ position: 'absolute', ...rect, borderRadius: pip ? radius.m : radius.xl, overflow: 'hidden', backgroundColor: '#000000', zIndex: pip ? 2 : 1, borderWidth: pip ? 2 : 0, borderColor: '#FFFFFF' }}>
       {children}
       {pip ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`${label} groß anzeigen`} onPress={onExpand} style={StyleSheet.absoluteFill} />
-      ) : (
+      ) : bare ? null : (
         <>
           <View pointerEvents="none" style={{ position: 'absolute', top: space.s, left: space.s, paddingHorizontal: space.s, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' }}>
             <Txt variant="small" color="#FFFFFF" style={{ fontWeight: '700', fontSize: 12, lineHeight: 16 }}>{label}</Txt>
@@ -487,7 +490,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const stage = video || mirror ? (
     <View style={{ width, height: layout.height, marginBottom: both ? BADGE / 2 - space.s : 0 }}>
       {layout.video ? (
-        <Pane key="video" rect={layout.video} label="Vormachen" pip={layout.pip === 'video'} expanded={focus === 'video'} onExpand={() => toggle('video')}>
+        <Pane key="video" rect={layout.video} label="Vormachen" pip={layout.pip === 'video'} expanded={focus === 'video'} onExpand={() => toggle('video')} bare>
           {players.map(({ s, file }) => {
             const active = s.id === step.id;
             return (
