@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Txt } from '@/components/ui';
 import { errorText } from '@/lib/api';
@@ -272,6 +272,18 @@ export function GroupChat({ info }: { info: GroupInfo }) {
   const [pollOpen, setPollOpen] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // the field sits right above the tab bar (the safe area of a tab screen already holds it), and right above the keyboard while that is open
+  // (owner 10.11.2026: "hier sehr frei Platz")
+  const [keyboard, setKeyboard] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboard(true));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboard(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const bottomPad = keyboard ? space.s : insets.bottom + space.s;
 
   // being here marks everything as read
   const newest = messages[0]?.id;
@@ -329,7 +341,7 @@ export function GroupChat({ info }: { info: GroupInfo }) {
 
   const muted = info.mutedUntil !== null;
   const composer = info.canPost ? (
-    <View style={{ gap: space.xs, paddingHorizontal: space.m, paddingTop: space.s, paddingBottom: Math.max(insets.bottom, space.s) + 56, borderTopWidth: 1, borderTopColor: p.line, backgroundColor: p.surface }}>
+    <View style={{ gap: space.xs, paddingHorizontal: space.m, paddingTop: space.s, paddingBottom: bottomPad, borderTopWidth: 1, borderTopColor: p.line, backgroundColor: p.surface }}>
       {replyTo ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, paddingHorizontal: space.s }}>
           <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: p.accent, paddingLeft: space.s }}>
@@ -367,7 +379,7 @@ export function GroupChat({ info }: { info: GroupInfo }) {
       </View>
     </View>
   ) : (
-    <View style={{ padding: space.l, paddingBottom: Math.max(insets.bottom, space.s) + 56, borderTopWidth: 1, borderTopColor: p.line, backgroundColor: p.surface }}>
+    <View style={{ padding: space.l, paddingBottom: bottomPad + space.s, borderTopWidth: 1, borderTopColor: p.line, backgroundColor: p.surface }}>
       <Txt variant="small" muted style={{ textAlign: 'center' }}>
         {muted ? `Du kannst bis ${new Date((info.mutedUntil ?? 0) * 1000).toLocaleString('de-DE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} nicht schreiben.` : 'Hier schreibt nur das Team. Du kannst reagieren und abstimmen.'}
       </Txt>
