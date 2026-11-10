@@ -13,6 +13,8 @@ export default function LibraryStack() {
         headerShadowVisible: false,
         headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: p.bg },
+        // back only from the edge: on iOS 26 a swipe anywhere would take the drag on a video's bar (owner 10.11.2026: "das ganze Video geht nach rechts")
+        fullScreenGestureEnabled: false,
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />

@@ -475,6 +475,8 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
   const width = screenW - 2 * space.l;
   const layout = stageLayout({ width, screenH, videoAspect, video, mirror, focus });
   const both = video && mirror;
+  // the video's bar ends before the countdown badge: on the picture bottom right, or on the seam beside a mirror (none on a video above the mirror)
+  const badgeInset = !both ? BADGE + space.s : layout.video && layout.mirror && layout.video.top < layout.mirror.top ? 0 : BADGE / 2 + space.s;
   const toggle = (kind: 'video' | 'mirror') => setFocus((f) => (f === kind ? 'both' : kind));
   // the running video, and the next one lying ready behind it when both are files: the same key keeps it at its turn
   const nextFile = preload?.videoId && preload.videoAvailable ? videos.file(preload.videoId) : null;
@@ -506,6 +508,7 @@ export function RoutineSession({ routine, practice }: { routine: MemberRoutine; 
                   file={file}
                   onFileFailed={() => videos.drop(s.videoId ?? '')}
                   restartSignal={active ? restart : undefined}
+                  controlsInsetRight={badgeInset}
                   playPath={`/api/member/videos/${encodeURIComponent(s.videoId ?? '')}/play`}
                 />
               </View>

@@ -18,7 +18,10 @@
 // buffering, that would throw away what it has). With `file` (the video is on the phone, lib/exercise-videos.ts) it plays from there, whatever the
 // connection does; the server only adds the watermark, and the parent may keep it mounted hidden with `playing` false: it is
 // ready at once at its turn.
-import { Ionicons } from '@expo/vector-icons';
+// 10.11.2026 (owner: "beim Vor- oder Zurückspulen hängt das immer … das Video muss gar nicht hängen"): the token is renewed in time also while paused (a
+// pause used to start the count again, and a jump after it asked with an expired address); a lesson whose address fails reloads by itself at the same
+// place before it says anything. The routine's video gets "10 Sekunden vor" and a bar to tap or drag.
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useIsFocused } from 'expo-router';
 import { useEvent, useEventListener } from 'expo';
@@ -64,6 +67,8 @@ export interface LessonPlayerProps {
   mini?: boolean;
   /** coach: every new number starts the video from the beginning. */
   restartSignal?: number;
+  /** coach: room kept free on the right of the bar and buttons (the countdown of the exercise sits there). */
+  controlsInsetRight?: number;
 }
 
 /** After this long without data the waiting indicator also says why. */
@@ -79,6 +84,19 @@ function seek(player: VideoPlayer, at: number): void {
   player.currentTime = at;
 }
 
+/** `by` seconds on or back, within the video (never past its end: a looping video would start again). */
+function jump(player: VideoPlayer, by: number): void {
+  const dur = player.duration;
+  const end = Number.isFinite(dur) && dur > 0 ? dur - 0.3 : Number.POSITIVE_INFINITY;
+  seek(player, Math.max(0, Math.min(end, player.currentTime + by)));
+}
+
+/** "1:05". */
+function clock(sec: number): string {
+  const s = Math.max(0, Math.floor(Number.isFinite(sec) ? sec : 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 /** Development: what happened to the stream, in the log of the dev server (never the address: it carries the token). */
 function logVideo(what: string, detail?: string): void {
   if (__DEV__) console.warn(`[Video] ${what}${detail ? `: ${detail.replace(/([?&]t=)[^&\s]+/g, '$1…')}` : ''}`);
@@ -86,6 +104,7 @@ function logVideo(what: string, detail?: string): void {
 
 export function LessonPlayer({
   playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false, restartSignal,
+  controlsInsetRight = 0,
 }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
@@ -98,7 +117,8 @@ export function LessonPlayer({
   const focused = useIsFocused();
   const player = useVideoPlayer(null, (p) => {
     p.loop = coach;
-    if (!coach) p.timeUpdateEventInterval = 1;
+    // the routine's bar follows the video closely
+    p.timeUpdateEventInterval = coach ? 0.5 : 1;
   });
   // lesson: the whole screen (only one picture at a time: the player moves over)
   const [large, setLarge] = useState(false);
@@ -110,7 +130,13 @@ export function LessonPlayer({
   const [firstFrame, setFirstFrame] = useState(false);
   const alive = useRef(true);
   const reloading = useRef(false);
-  const autoReloads = useRef(0);
+  // stalls repaired by themselves since the video last played on (a state: the message waits for them)
+  const [autoTries, setAutoTries] = useState(0);
+  const [renewing, setRenewing] = useState(false);
+  // when the token came (its `renewAfterSec` counts from here, whatever the phone's clock says)
+  const playReceived = useRef(0);
+  const reloadPos = useRef(0);
+  const lastPlayingAt = useRef(0);
   const savedAt = useRef(0);
   const completedSent = useRef(false);
   const resumeOnFocus = useRef(false);
@@ -134,8 +160,15 @@ export function LessonPlayer({
   });
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     seen.current = { pos: currentTime, dur: player.duration };
-    onTime?.(currentTime, player.duration);
+    if (player.playing) lastPlayingAt.current = Date.now();
+    // it plays on well past the place it was reloaded at: the next stall may be repaired again
+    if (Math.abs(currentTime - reloadPos.current) > 5) setAutoTries(0);
+    if (!coach) onTime?.(currentTime, player.duration);
   });
+  const takePlay = useCallback((resp: PlayResponse) => {
+    playReceived.current = Date.now();
+    setPlay(resp);
+  }, []);
   // also when the parent starts to listen later (a hidden video that becomes the visible one)
   useEffect(() => {
     if (videoAspect) onAspect?.(videoAspect);
@@ -148,13 +181,15 @@ export function LessonPlayer({
     if (autoplay) player.play();
   }, [api, player]);
 
-  /** A new token and address, at the same place (button "Neu laden", "Noch einmal", a stuck video). */
-  const reload = useCallback(async (why: string) => {
+  /** A new token and address, at the same place (button "Neu laden", "Noch einmal", a stuck video). `resume`: play on afterwards. */
+  const reload = useCallback(async (why: string, resume?: boolean) => {
     if (reloading.current) return;
     reloading.current = true;
     const at = player.currentTime;
-    const wasPlaying = player.playing;
+    const wasPlaying = resume ?? player.playing;
+    reloadPos.current = at;
     logVideo('neu laden', `${why} bei ${Math.round(at)} s`);
+    setRenewing(true);
     setLoaded(false);
     setError(null);
     setFrozen(false);
@@ -165,7 +200,7 @@ export function LessonPlayer({
       } else {
         const resp = await api.post<PlayResponse>(playPath);
         if (!alive.current) return;
-        setPlay(resp);
+        takePlay(resp);
         // coach: `playing` starts it again as soon as it is loaded
         await attach(resp, at, !coach && wasPlaying);
       }
@@ -175,8 +210,9 @@ export function LessonPlayer({
       if (alive.current) setError(err);
     } finally {
       reloading.current = false;
+      if (alive.current) setRenewing(false);
     }
-  }, [api, attach, coach, localFile, playPath, player]);
+  }, [api, attach, coach, localFile, playPath, player, takePlay]);
 
   // first token
   useEffect(() => {
@@ -193,14 +229,14 @@ export function LessonPlayer({
         }
         try {
           const resp = await api.post<PlayResponse>(playPath);
-          if (alive.current) setPlay(resp);
+          if (alive.current) takePlay(resp);
         } catch { /* see above */ }
         return;
       }
       try {
         const resp = await api.post<PlayResponse>(playPath);
         if (!alive.current) return;
-        setPlay(resp);
+        takePlay(resp);
         // coach: the exercise always from the start (not where the lesson was left)
         await attach(resp, coach ? 0 : resp.resumeAtSec, false);
         if (alive.current) setLoaded(true);
@@ -209,7 +245,7 @@ export function LessonPlayer({
       }
     })();
     return () => { alive.current = false; };
-  }, [api, playPath, attach, coach, localFile, player]);
+  }, [api, playPath, attach, coach, localFile, player, takePlay]);
 
   // lesson: starts by itself as soon as there is something to play (once, and only with the lesson in front)
   useEffect(() => {
@@ -241,7 +277,7 @@ export function LessonPlayer({
       const now = player.currentTime;
       still = Math.abs(now - last) < 0.05 ? still + 1 : 0;
       last = now;
-      if (still === 0) autoReloads.current = 0;
+      if (still === 0) setAutoTries(0);
       setFrozen(still >= FROZEN_AFTER_SEC);
     }, 1000);
     return () => {
@@ -262,22 +298,25 @@ export function LessonPlayer({
     if (coach && restartSignal) seek(player, 0);
   }, [coach, player, restartSignal]);
 
-  // a new token after renewAfterSec while playing (the old one would expire mid-video); a file needs none
+  // a new token after renewAfterSec, counted from when it came — playing or paused: the next jump must never ask with an expired address; a file needs
+  // none. Paused it stays paused at its place.
   useEffect(() => {
-    if (!play || !isPlaying || localFile) return;
+    if (!play || localFile) return;
+    const due = playReceived.current + Math.max(30, play.renewAfterSec) * 1000 - Date.now();
     const t = setTimeout(() => {
       void (async () => {
         try {
           const at = player.currentTime;
+          const wasPlaying = player.playing;
           const resp = await api.post<PlayResponse>(playPath);
           if (!alive.current) return;
-          setPlay(resp);
-          await attach(resp, at, true);
-        } catch { /* the error event of the player shows it */ }
+          takePlay(resp);
+          await attach(resp, at, wasPlaying);
+        } catch { /* a failing address is repaired below */ }
       })();
-    }, Math.max(30, play.renewAfterSec) * 1000);
+    }, Math.max(1000, due));
     return () => clearTimeout(t);
-  }, [api, attach, isPlaying, localFile, play, playPath, player]);
+  }, [api, attach, localFile, play, playPath, player, takePlay]);
 
   const save = useCallback(async (completed = false) => {
     if (!progressPath) return;
@@ -324,7 +363,8 @@ export function LessonPlayer({
 
   // waiting for data: says so, after a moment also why
   const failed = !!error || status === 'error';
-  const waiting = !failed && (!loaded || status === 'loading' || frozen);
+  // while it repairs itself the spinner stands there, not the message
+  const waiting = renewing || (!failed && (!loaded || status === 'loading' || frozen));
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (!waiting) return;
@@ -338,16 +378,19 @@ export function LessonPlayer({
     onWaiting?.(waiting);
   }, [onWaiting, waiting]);
   // coach: standing still for a while or failed (e.g. the address ran out), while it should play: a new address by itself. A
-  // video that is only loading or buffering is left alone.
-  const stuck = coach && !!playing && (frozen || failed);
+  // video that is only loading or buffering is left alone. Lesson: an address that fails (a jump after a long pause, another
+  // device took the stream) gets a new one at the same place, playing on when it played just before.
+  const stuck = coach ? !!playing && (frozen || failed) : failed && !renewing;
   useEffect(() => {
-    if (!stuck || autoReloads.current >= AUTO_RELOADS) return;
+    if (!stuck || autoTries >= AUTO_RELOADS) return;
     const t = setTimeout(() => {
-      autoReloads.current += 1;
-      void reload(`hängt (Versuch ${autoReloads.current})`);
+      setAutoTries((n) => n + 1);
+      void reload(`hängt (Versuch ${autoTries + 1})`, coach ? undefined : Date.now() - lastPlayingAt.current < 3000);
     }, failed ? 0 : AUTO_RELOAD_MS);
     return () => clearTimeout(t);
-  }, [failed, loaded, reload, stuck]);
+  }, [autoTries, coach, failed, loaded, reload, stuck]);
+  // the message only when repairing did not help (or the address itself could not be had)
+  const showFailed = failed && !renewing && (coach || !!error || autoTries >= AUTO_RELOADS);
 
   const toggleLarge = () => {
     const wasPlaying = player.playing;
@@ -396,9 +439,13 @@ export function LessonPlayer({
       {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
       {waitingView}
       {coach && !mini && !failed ? (
-        <View style={{ position: 'absolute', left: space.s, bottom: space.s, flexDirection: 'row', gap: space.xs }}>
-          <RoundIcon icon="play-back" label="10 Sekunden zurück" onPress={() => player.seekBy(-10)} />
-          <RoundIcon icon="refresh" label="Video neu laden" onPress={() => void reload('Knopf')} />
+        <View style={{ position: 'absolute', left: space.s, right: space.s + controlsInsetRight, bottom: space.s, gap: space.xs }}>
+          <SeekBar player={player} />
+          <View style={{ flexDirection: 'row', gap: space.xs }}>
+            <TenButton icon="replay-10" label="10 Sekunden zurück" onPress={() => jump(player, -10)} />
+            <TenButton icon="forward-10" label="10 Sekunden vor" onPress={() => jump(player, 10)} />
+            <RoundIcon icon="refresh" label="Video neu laden" onPress={() => void reload('Knopf')} />
+          </View>
         </View>
       ) : null}
       {!coach && !failed ? (
@@ -421,10 +468,10 @@ export function LessonPlayer({
           </View>
         </Modal>
       ) : null}
-      {failed ? (
+      {showFailed ? (
         <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: 'rgba(0,0,0,0.75)', padding: coach ? space.s : space.l, gap: space.m }]}>
           <Txt color="#FFFFFF" variant={coach ? 'small' : 'body'} style={{ textAlign: 'center' }}>{error ? errorText(error) : 'Das Video konnte nicht geladen werden.'}</Txt>
-          <Button label="Noch einmal" kind="secondary" onPress={() => void reload('Noch einmal')} />
+          <Button label="Noch einmal" kind="secondary" onPress={() => { setAutoTries(0); void reload('Noch einmal', true); }} />
         </View>
       ) : null}
     </View>
@@ -437,6 +484,63 @@ function frameStyle(aspect: number, screenW: number, screenH: number) {
   const pageW = screenW - 2 * space.l;
   const height = Math.round(Math.min(screenH * 0.7, pageW / aspect));
   return { height, width: Math.round(height * aspect), alignSelf: 'center' as const };
+}
+
+/** "10 Sekunden zurück / vor" on the routine's video. */
+function TenButton({ icon, label, onPress }: { icon: 'replay-10' | 'forward-10'; label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={styles.round}>
+      <MaterialIcons name={icon} size={20} color="#FFFFFF" />
+    </Pressable>
+  );
+}
+
+/** The routine's bar: where the video is; a tap or a drag jumps there (owner 10.11.2026: "einfach mit der Leiste vorspulen"). */
+function SeekBar({ player }: { player: VideoPlayer }) {
+  const [time, setTime] = useState({ pos: 0, dur: 0 });
+  const [drag, setDrag] = useState<number | null>(null);
+  const [width, setWidth] = useState(1);
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => setTime({ pos: currentTime, dur: player.duration }));
+  // where the finger came down (page position) and the share of the bar there; read only while touching
+  const grab = useRef({ x: 0, f: 0 });
+  const clamp = (f: number) => Math.max(0, Math.min(1, f));
+  const shareAt = (pageX: number) => clamp(grab.current.f + (pageX - grab.current.x) / width);
+  const to = (f: number) => {
+    const dur = player.duration;
+    if (Number.isFinite(dur) && dur > 0) seek(player, Math.min(dur - 0.3, f * dur));
+  };
+  const frac = drag ?? (time.dur > 0 ? Math.min(1, time.pos / time.dur) : 0);
+  const pct = `${Math.round(frac * 1000) / 10}%` as const;
+  return (
+    <View
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderTerminationRequest={() => false}
+      onResponderGrant={(e) => {
+        const f = clamp(e.nativeEvent.locationX / width);
+        grab.current = { x: e.nativeEvent.pageX, f };
+        setDrag(f);
+      }}
+      onResponderMove={(e) => setDrag(shareAt(e.nativeEvent.pageX))}
+      onResponderRelease={(e) => {
+        to(shareAt(e.nativeEvent.pageX));
+        setDrag(null);
+      }}
+      onResponderTerminate={() => setDrag(null)}
+      onLayout={(e) => setWidth(Math.max(1, e.nativeEvent.layout.width))}
+      accessibilityRole="adjustable"
+      accessibilityLabel="Stelle im Video"
+      accessibilityValue={{ text: `${clock(time.pos)} von ${clock(time.dur)}` }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={(e) => jump(player, e.nativeEvent.actionName === 'increment' ? 10 : -10)}
+      style={{ height: 28, justifyContent: 'center' }}
+    >
+      <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', overflow: 'hidden' }}>
+        <View style={{ width: pct, height: 4, backgroundColor: '#FFFFFF' }} />
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', left: pct, marginLeft: -8, width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF' }} />
+    </View>
+  );
 }
 
 /** A small round button on the picture. */
