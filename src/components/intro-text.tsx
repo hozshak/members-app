@@ -1,29 +1,22 @@
-// The text of an introduction page (lib/intro-text.ts): paragraphs with their bold labels, tips in a box, the coach's pictures at their place.
+// The text of an introduction page (lib/intro-text.ts): paragraphs with their bold labels and the coach's **bold**, tips in a box, the coach's pictures at their place.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { ProgrammeIntroImage } from '@/lib/intro';
 import { introBlocks } from '@/lib/intro-text';
-import { linkParts, useOpenLink } from '@/lib/links';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
+import { useTextSpans } from './linked-text';
 import { Txt } from './ui';
 
 function Paragraph({ label, text, muted }: { label: string | null; text: string; muted?: boolean }) {
   const p = usePalette();
-  const openLink = useOpenLink();
+  const spans = useTextSpans();
   return (
     <Txt muted={muted}>
       {label ? <Text style={{ fontWeight: '700', color: p.text }}>{label}: </Text> : null}
-      {linkParts(text).map((part, i) => {
-        const href = part.href;
-        return href ? (
-          <Text key={i} accessibilityRole="link" onPress={() => openLink(href)} style={{ color: p.accent, textDecorationLine: 'underline' }}>{part.text}</Text>
-        ) : (
-          part.text
-        );
-      })}
+      {spans(text, true)}
     </Txt>
   );
 }

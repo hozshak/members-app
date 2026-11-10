@@ -220,7 +220,7 @@ function Pager({ product, intro, base }: { product: MemberProductDetail; intro: 
             <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="heart" size={44} color={p.accent} />
             </View>
-            <LinkedText text={intro.closing} variant="title" style={{ textAlign: 'center' }} />
+            <LinkedText text={intro.closing} rich variant="title" style={{ textAlign: 'center' }} />
             {planNext ? <Txt muted style={{ textAlign: 'center' }}>Als Nächstes: „{planNext.title}“</Txt> : null}
           </View>
         ) : null}
