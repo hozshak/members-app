@@ -5,25 +5,25 @@
 // a watermark the native fullscreen is off (it would hide the watermark). The frame takes the shape of the video as soon
 // as it is loaded: a portrait (phone) video stands upright — at most 70 % of the screen height, centred — instead of a
 // small picture between black bars.
-// While the video has to wait for data it says so ("Internet langsam – Video lädt …" after a moment). A lesson video can be
-// enlarged to the whole screen and back, also with a watermark (the watermark stays on the picture).
-// "Neu laden" gets a new address and goes on at the same place (a stuck stream, or another device took over the stream).
+// While the video has to wait for data a small spinner turns, nothing more. A lesson video can be enlarged to the whole screen and back, also with a
+// watermark (the watermark stays on the picture).
 // A lesson video starts by itself (`autoPlay`), pauses while another screen or tab is in front and goes on afterwards. Until
 // its first picture is there the video's thumbnail stands in (`posterUrl`).
-// Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, plays exactly while
-// `playing` is true (the countdown of the exercise), has buttons for "10 seconds back", "Neu laden" and sound instead of
-// controls; the parent learns the video's shape (onAspect) and when it waits for data (onWaiting).
-// A video stopped from outside (a call, the system's audio) goes on by itself. A picture that stands still although the video
-// plays counts as waiting, and a stuck or failed video reloads by itself (at most twice per stall; never one that is only
-// buffering, that would throw away what it has). With `file` (the video is on the phone, lib/exercise-videos.ts) it plays from there, whatever the
-// connection does; the server only adds the watermark, and the parent may keep it mounted hidden with `playing` false: it is
-// ready at once at its turn.
+// Variant "coach" (routine, next to the mirror): fills the frame of its parent, starts at 0 and loops, starts and stops with
+// `playing` (the countdown of the exercise); the parent learns the video's shape (onAspect) and when it waits for data (onWaiting). With `file` (the
+// video is on the phone, lib/exercise-videos.ts) it plays from there, whatever the connection does; the server only adds the watermark, and the parent
+// may keep it mounted hidden with `playing` false: it is ready at once at its turn.
+// A video whose address fails (it ran out, another device took the stream) gets a new one by itself at the same place (at most twice in a row); one that
+// only buffers is left alone — a new address would throw away what it has.
 // 10.11.2026 (owner: "beim Vor- oder Zurückspulen hängt das immer … das Video muss gar nicht hängen"): the token is renewed in time also while paused (a
 // pause used to start the count again, and a jump after it asked with an expired address); a lesson whose address fails reloads by itself at the same
-// place before it says anything. The routine's video gets "10 Sekunden vor" and a bar to tap or drag.
+// place before it says anything.
+// 10.11.2026 (owner: "beim Neuladen hängt es und sagt Internet langsam … ich will flüssiges Video, Neuladen brauche ich nicht, Internet langsam auch
+// nicht … vielleicht muss es genau der Videoplayer wie in Inhalte sein"): the routine's video has the phone's own controls like a lesson (play, pause, the
+// bar, full screen), no own buttons, no "Neu laden" and no message; it never reloads itself because it stands still, and both keep a minute ahead.
 // 10.11.2026 (owner: "Videoschutz, dass keine Bildschirmaufnahme machen darf"): while a video is on screen the phone allows neither a screen recording
 // nor a screenshot (expo-screen-capture: iOS hides the picture in a recording, Android blacks out the window); another screen allows it again.
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useIsFocused } from 'expo-router';
 import { useEvent, useEventListener } from 'expo';
@@ -66,38 +66,22 @@ export interface LessonPlayerProps {
   file?: string | null;
   /** The file does not play. */
   onFileFailed?: () => void;
-  /** coach: a very small picture (no button, no text). */
+  /** coach: a very small picture (no controls). */
   mini?: boolean;
   /** coach: every new number starts the video from the beginning. */
   restartSignal?: number;
-  /** coach: room kept free on the right of the bar and buttons (the countdown of the exercise sits there). */
+  /** Not used any more (the routine's own bar is gone, 10.11.2026); kept so older callers still compile. */
   controlsInsetRight?: number;
 }
 
-/** After this long without data the waiting indicator also says why. */
-const SLOW_AFTER_MS = 2500;
-/** coach: the picture stands still for this many seconds although it should play: it counts as waiting. */
-const FROZEN_AFTER_SEC = 5;
-/** coach: still waiting after this long: a new address by itself, at most AUTO_RELOADS times per stall. */
-const AUTO_RELOAD_MS = 9000;
+/** A failing address gets a new one by itself at most this often in a row. */
 const AUTO_RELOADS = 2;
+/** How far ahead the player loads (seconds): a short dip of the connection does not stop the picture. */
+const BUFFER_AHEAD_SEC = 60;
 
 /** Jumps to a position. expo-video's player is an imperative native object: seeking is assigning `currentTime`. */
 function seek(player: VideoPlayer, at: number): void {
   player.currentTime = at;
-}
-
-/** `by` seconds on or back, within the video (never past its end: a looping video would start again). */
-function jump(player: VideoPlayer, by: number): void {
-  const dur = player.duration;
-  const end = Number.isFinite(dur) && dur > 0 ? dur - 0.3 : Number.POSITIVE_INFINITY;
-  seek(player, Math.max(0, Math.min(end, player.currentTime + by)));
-}
-
-/** "1:05". */
-function clock(sec: number): string {
-  const s = Math.max(0, Math.floor(Number.isFinite(sec) ? sec : 0));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /** Development: what happened to the stream, in the log of the dev server (never the address: it carries the token). */
@@ -107,7 +91,6 @@ function logVideo(what: string, detail?: string): void {
 
 export function LessonPlayer({
   playPath, progressPath, aspect = 16 / 9, onCompleted, autoPlay = false, onTime, variant = 'lesson', playing, onAspect, onWaiting, posterUrl, file, onFileFailed, mini = false, restartSignal,
-  controlsInsetRight = 0,
 }: LessonPlayerProps) {
   const api = useApi();
   const coach = variant === 'coach';
@@ -129,8 +112,8 @@ export function LessonPlayer({
   }, [focused, captureKey]);
   const player = useVideoPlayer(null, (p) => {
     p.loop = coach;
-    // the routine's bar follows the video closely
-    p.timeUpdateEventInterval = coach ? 0.5 : 1;
+    p.timeUpdateEventInterval = 1;
+    p.bufferOptions = { preferredForwardBufferDuration: BUFFER_AHEAD_SEC, waitsToMinimizeStalling: true };
   });
   // lesson: the whole screen (only one picture at a time: the player moves over)
   const [large, setLarge] = useState(false);
@@ -138,7 +121,6 @@ export function LessonPlayer({
   const [loaded, setLoaded] = useState(false);
   const [play, setPlay] = useState<PlayResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [frozen, setFrozen] = useState(false);
   const [firstFrame, setFirstFrame] = useState(false);
   const alive = useRef(true);
   const reloading = useRef(false);
@@ -193,7 +175,7 @@ export function LessonPlayer({
     if (autoplay) player.play();
   }, [api, player]);
 
-  /** A new token and address, at the same place (button "Neu laden", "Noch einmal", a stuck video). `resume`: play on afterwards. */
+  /** A new token and address, at the same place ("Noch einmal", an address that failed). `resume`: play on afterwards. */
   const reload = useCallback(async (why: string, resume?: boolean) => {
     if (reloading.current) return;
     reloading.current = true;
@@ -204,7 +186,6 @@ export function LessonPlayer({
     setRenewing(true);
     setLoaded(false);
     setError(null);
-    setFrozen(false);
     try {
       if (localFile) {
         await player.replaceAsync({ uri: localFile });
@@ -277,26 +258,6 @@ export function LessonPlayer({
       player.play();
     }
   }, [coach, focused, player]);
-
-  // coach: it should play: stopped from outside it goes on; a picture that stands still anyway counts as waiting (no status
-  // tells that)
-  useEffect(() => {
-    if (!coach || !loaded || !playing || status !== 'readyToPlay') return;
-    let last = player.currentTime;
-    let still = 0;
-    const t = setInterval(() => {
-      if (!player.playing) player.play();
-      const now = player.currentTime;
-      still = Math.abs(now - last) < 0.05 ? still + 1 : 0;
-      last = now;
-      if (still === 0) setAutoTries(0);
-      setFrozen(still >= FROZEN_AFTER_SEC);
-    }, 1000);
-    return () => {
-      clearInterval(t);
-      setFrozen(false);
-    };
-  }, [coach, loaded, playing, player, status]);
 
   // coach: plays exactly while the exercise runs
   useEffect(() => {
@@ -373,36 +334,25 @@ export function LessonPlayer({
   // last position when leaving the lesson
   useEffect(() => () => void save(), [save]);
 
-  // waiting for data: says so, after a moment also why
+  // waiting for data: a small spinner, no message
   const failed = !!error || status === 'error';
-  // while it repairs itself the spinner stands there, not the message
-  const waiting = renewing || (!failed && (!loaded || status === 'loading' || frozen));
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    if (!waiting) return;
-    const t = setTimeout(() => setSlow(true), SLOW_AFTER_MS);
-    return () => {
-      clearTimeout(t);
-      setSlow(false);
-    };
-  }, [waiting]);
+  const waiting = renewing || (!failed && (!loaded || status === 'loading'));
   useEffect(() => {
     onWaiting?.(waiting);
   }, [onWaiting, waiting]);
-  // coach: standing still for a while or failed (e.g. the address ran out), while it should play: a new address by itself. A
-  // video that is only loading or buffering is left alone. Lesson: an address that fails (a jump after a long pause, another
-  // device took the stream) gets a new one at the same place, playing on when it played just before.
-  const stuck = coach ? !!playing && (frozen || failed) : failed && !renewing;
+  // an address that fails (it ran out, a jump after a long pause, another device took the stream): a new one at the same place, playing on when it played
+  // just before (coach: when the exercise runs). One that only loads or buffers is left alone.
+  const stuck = failed && !renewing && (!coach || !!playing);
   useEffect(() => {
     if (!stuck || autoTries >= AUTO_RELOADS) return;
     const t = setTimeout(() => {
       setAutoTries((n) => n + 1);
-      void reload(`hängt (Versuch ${autoTries + 1})`, coach ? undefined : Date.now() - lastPlayingAt.current < 3000);
-    }, failed ? 0 : AUTO_RELOAD_MS);
+      void reload(`Fehler (Versuch ${autoTries + 1})`, coach ? undefined : Date.now() - lastPlayingAt.current < 3000);
+    }, 0);
     return () => clearTimeout(t);
-  }, [autoTries, coach, failed, loaded, reload, stuck]);
+  }, [autoTries, coach, reload, stuck]);
   // the message only when repairing did not help (or the address itself could not be had)
-  const showFailed = failed && !renewing && (coach || !!error || autoTries >= AUTO_RELOADS);
+  const showFailed = failed && !renewing && (!!error || autoTries >= AUTO_RELOADS);
 
   const toggleLarge = () => {
     const wasPlaying = player.playing;
@@ -413,15 +363,8 @@ export function LessonPlayer({
   const wm = play?.watermark;
   const showPoster = !!posterUrl && !firstFrame && !isPlaying && !failed;
   const waitingView = waiting ? (
-    <View style={[StyleSheet.absoluteFill, styles.center, { gap: space.s, padding: space.s, backgroundColor: slow ? 'rgba(0,0,0,0.45)' : 'transparent' }]} pointerEvents="box-none">
-      <ActivityIndicator color="#FFFFFF" />
-      {slow && !mini ? <Text style={styles.slow} accessibilityLiveRegion="polite">{localFile ? 'Video lädt …' : 'Internet langsam – Video lädt …'}</Text> : null}
-      {slow && !mini ? (
-        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => void reload('Knopf')} style={styles.reload}>
-          <Ionicons name="refresh" size={16} color="#FFFFFF" />
-          <Text style={styles.reloadText}>Neu laden</Text>
-        </Pressable>
-      ) : null}
+    <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+      <ActivityIndicator color="#FFFFFF" accessibilityLabel="Video lädt" />
     </View>
   ) : null;
   return (
@@ -430,7 +373,8 @@ export function LessonPlayer({
         <VideoView
           player={player}
           style={StyleSheet.absoluteFill}
-          nativeControls={!coach}
+          // the phone's own controls like in "Inhalte" (play, pause, the bar, full screen); a very small picture beside the mirror has none
+          nativeControls={!mini}
           contentFit="contain"
           // Android: a hidden video (loading ahead) really stays invisible only on a texture
           surfaceType={coach ? 'textureView' : undefined}
@@ -450,16 +394,6 @@ export function LessonPlayer({
       ) : null}
       {wm?.enabled && wm.text ? <Watermark text={wm.text} opacity={wm.opacityPct / 100} intervalSec={wm.intervalSec} /> : null}
       {waitingView}
-      {coach && !mini && !failed ? (
-        <View style={{ position: 'absolute', left: space.s, right: space.s + controlsInsetRight, bottom: space.s, gap: space.xs }}>
-          <SeekBar player={player} />
-          <View style={{ flexDirection: 'row', gap: space.xs }}>
-            <TenButton icon="replay-10" label="10 Sekunden zurück" onPress={() => jump(player, -10)} />
-            <TenButton icon="forward-10" label="10 Sekunden vor" onPress={() => jump(player, 10)} />
-            <RoundIcon icon="refresh" label="Video neu laden" onPress={() => void reload('Knopf')} />
-          </View>
-        </View>
-      ) : null}
       {!coach && !failed ? (
         <RoundIcon icon="expand" label="Video vergrößern" onPress={toggleLarge} style={{ position: 'absolute', right: space.s, top: space.s }} />
       ) : null}
@@ -498,63 +432,6 @@ function frameStyle(aspect: number, screenW: number, screenH: number) {
   return { height, width: Math.round(height * aspect), alignSelf: 'center' as const };
 }
 
-/** "10 Sekunden zurück / vor" on the routine's video. */
-function TenButton({ icon, label, onPress }: { icon: 'replay-10' | 'forward-10'; label: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={styles.round}>
-      <MaterialIcons name={icon} size={20} color="#FFFFFF" />
-    </Pressable>
-  );
-}
-
-/** The routine's bar: where the video is; a tap or a drag jumps there (owner 10.11.2026: "einfach mit der Leiste vorspulen"). */
-function SeekBar({ player }: { player: VideoPlayer }) {
-  const [time, setTime] = useState({ pos: 0, dur: 0 });
-  const [drag, setDrag] = useState<number | null>(null);
-  const [width, setWidth] = useState(1);
-  useEventListener(player, 'timeUpdate', ({ currentTime }) => setTime({ pos: currentTime, dur: player.duration }));
-  // where the finger came down (page position) and the share of the bar there; read only while touching
-  const grab = useRef({ x: 0, f: 0 });
-  const clamp = (f: number) => Math.max(0, Math.min(1, f));
-  const shareAt = (pageX: number) => clamp(grab.current.f + (pageX - grab.current.x) / width);
-  const to = (f: number) => {
-    const dur = player.duration;
-    if (Number.isFinite(dur) && dur > 0) seek(player, Math.min(dur - 0.3, f * dur));
-  };
-  const frac = drag ?? (time.dur > 0 ? Math.min(1, time.pos / time.dur) : 0);
-  const pct = `${Math.round(frac * 1000) / 10}%` as const;
-  return (
-    <View
-      onStartShouldSetResponder={() => true}
-      onMoveShouldSetResponder={() => true}
-      onResponderTerminationRequest={() => false}
-      onResponderGrant={(e) => {
-        const f = clamp(e.nativeEvent.locationX / width);
-        grab.current = { x: e.nativeEvent.pageX, f };
-        setDrag(f);
-      }}
-      onResponderMove={(e) => setDrag(shareAt(e.nativeEvent.pageX))}
-      onResponderRelease={(e) => {
-        to(shareAt(e.nativeEvent.pageX));
-        setDrag(null);
-      }}
-      onResponderTerminate={() => setDrag(null)}
-      onLayout={(e) => setWidth(Math.max(1, e.nativeEvent.layout.width))}
-      accessibilityRole="adjustable"
-      accessibilityLabel="Stelle im Video"
-      accessibilityValue={{ text: `${clock(time.pos)} von ${clock(time.dur)}` }}
-      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-      onAccessibilityAction={(e) => jump(player, e.nativeEvent.actionName === 'increment' ? 10 : -10)}
-      style={{ height: 28, justifyContent: 'center' }}
-    >
-      <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', overflow: 'hidden' }}>
-        <View style={{ width: pct, height: 4, backgroundColor: '#FFFFFF' }} />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', left: pct, marginLeft: -8, width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF' }} />
-    </View>
-  );
-}
-
 /** A small round button on the picture. */
 function RoundIcon({ icon, label, onPress, style }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; style?: object }) {
   return (
@@ -585,8 +462,5 @@ function Watermark({ text, opacity, intervalSec }: { text: string; opacity: numb
 const styles = StyleSheet.create({
   frame: { maxWidth: '100%', backgroundColor: '#000000', overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  slow: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  reload: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: space.m, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.65)' },
-  reloadText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
 });
