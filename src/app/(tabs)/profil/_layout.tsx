@@ -22,6 +22,7 @@ export default function ProfileStack() {
       <Stack.Screen name="routinen" options={{ title: 'Routine beenden' }} />
       <Stack.Screen name="zunge" options={{ title: 'Zungen-Erinnerung' }} />
       <Stack.Screen name="app-icon" options={{ title: 'App-Icon' }} />
+      <Stack.Screen name="widgets" options={{ title: 'Widgets' }} />
       <Stack.Screen name="benachrichtigungen" options={{ title: 'Benachrichtigungen' }} />
       <Stack.Screen name="geraete" options={{ title: 'Geräte' }} />
       <Stack.Screen name="kaeufe" options={{ title: 'Meine Käufe' }} />

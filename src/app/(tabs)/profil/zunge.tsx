@@ -71,8 +71,8 @@ export default function TongueScreen() {
       <Section title={Platform.OS === 'ios' ? 'Auf den Sperrbildschirm' : 'Auf den Startbildschirm'}>
         <Txt muted>
           {Platform.OS === 'ios'
-            ? 'Mit dem Widget siehst du die kleine Zunge jedes Mal, wenn du aufs Handy schaust: Sperrbildschirm gedrückt halten, „Anpassen“ und „Sperrbildschirm“ tippen, dann auf das Feld unter der Uhr und „Members“ → „Zunge“ wählen.'
-            : 'Mit dem Widget siehst du die kleine Zunge jedes Mal, wenn du aufs Handy schaust: Startbildschirm gedrückt halten, „Widgets“ tippen und „Members“ → „Zunge“ wählen.'}
+            ? 'Mit dem Widget siehst du die kleine Zunge jedes Mal, wenn du aufs Handy schaust: Sperrbildschirm gedrückt halten, „Anpassen“ und „Sperrbildschirm“ tippen, dann auf das Feld unter der Uhr und „THFM“ → „Zunge“ wählen.'
+            : 'Mit dem Widget siehst du die kleine Zunge jedes Mal, wenn du aufs Handy schaust: Startbildschirm gedrückt halten, „Widgets“ tippen und „THFM“ → „Zunge“ wählen.'}
         </Txt>
       </Section>
     </Screen>

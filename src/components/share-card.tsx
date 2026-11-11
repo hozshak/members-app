@@ -53,7 +53,7 @@ export function useShareCard(content: ShareContent | null) {
           <Text style={{ color: fg, fontSize: 30, lineHeight: 34, fontWeight: '700' }}>{content.label}</Text>
           <Text style={{ color: fg, fontSize: 18, lineHeight: 24, marginTop: 12, opacity: 0.85 }}>{content.line}</Text>
         </View>
-        <Text style={{ color: fg, fontSize: 13, opacity: 0.75 }}>Meine Routine · mit der App „Members“</Text>
+        <Text style={{ color: fg, fontSize: 13, opacity: 0.75 }}>Meine Routine · mit der App „THFM“</Text>
       </View>
     </View>
   ) : null;

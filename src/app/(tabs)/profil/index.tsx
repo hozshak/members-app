@@ -123,6 +123,7 @@ export default function ProfileScreen() {
         <MenuRow icon="phone-portrait-outline" label="Geräte" onPress={() => router.push('/profil/geraete' as Href)} />
         <MenuRow icon="bag-handle-outline" label="Meine Käufe" onPress={() => router.push('/profil/kaeufe' as Href)} />
         <TourTarget id="profil.icon"><MenuRow icon="color-palette-outline" label="App-Icon" onPress={() => router.push('/profil/app-icon' as Href)} /></TourTarget>
+        <MenuRow icon="apps-outline" label="Widgets" onPress={() => router.push('/profil/widgets' as Href)} />
         <TourTarget id="profil.intro"><MenuRow icon="compass-outline" label="Einführung ansehen" onPress={replayTours} /></TourTarget>
       </MenuGroup>
 
