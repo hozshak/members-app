@@ -39,14 +39,47 @@ export function useProduct(slug: string) {
   return useQuery({ queryKey: keys.product(slug), queryFn: () => api.get<MemberProductDetail>(`/api/member/products/${enc(slug)}`) });
 }
 
+/**
+ * The first look ends "Neu" (software migration 0123, 11.11.2026): opening an item or a category that was new makes the lists ask again, so its "Neu"
+ * is gone when the member goes back.
+ */
+function useRefreshNew() {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: keys.home });
+    void qc.invalidateQueries({ queryKey: keys.library });
+    void qc.invalidateQueries({ queryKey: ['product'] });
+  };
+}
+
 export function useCategory(slug: string) {
   const api = useApi();
-  return useQuery({ queryKey: keys.category(slug), queryFn: () => api.get<MemberCategoryDetail>(`/api/member/categories/${enc(slug)}`) });
+  const refreshNew = useRefreshNew();
+  return useQuery({
+    queryKey: keys.category(slug),
+    queryFn: async () => {
+      const detail = await api.get<MemberCategoryDetail>(`/api/member/categories/${enc(slug)}`);
+      if (detail.category.newCount > 0) refreshNew();
+      return detail;
+    },
+  });
 }
 
 export function useVideo(id: string) {
   const api = useApi();
-  return useQuery({ queryKey: keys.video(id), queryFn: () => api.get<VideoDetail>(`/api/member/videos/${enc(id)}`) });
+  const qc = useQueryClient();
+  const refreshNew = useRefreshNew();
+  return useQuery({
+    queryKey: keys.video(id),
+    queryFn: async () => {
+      const detail = await api.get<VideoDetail>(`/api/member/videos/${enc(id)}`);
+      if (detail.isNew) {
+        refreshNew();
+        void qc.invalidateQueries({ queryKey: ['category'] });
+      }
+      return detail;
+    },
+  });
 }
 
 /** Stream token + address + resume position of a lesson video. */
