@@ -1,6 +1,7 @@
 // One lesson: the video (if it has one), title and where it belongs, the lesson text with embedded videos, its PDF,
 // "Als erledigt markieren", the way to the previous / next lesson, "Gefällt mir" and the comments. Unlocked categories are
-// announced after "erledigt".
+// announced after "erledigt". The hint of its category (11.11.2026, e.g. "Teil der kompletten Routine in …") stands under the title as a card — plain
+// text, no link: Apple and Google allow no way to a purchase outside the app.
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
@@ -17,7 +18,7 @@ import { clock } from '@/lib/format';
 import { useOpen } from '@/lib/nav';
 import { useMarkDone, useVideo } from '@/lib/queries';
 import { useApi } from '@/lib/session';
-import { space, usePalette } from '@/lib/theme';
+import { radius, space, usePalette } from '@/lib/theme';
 import type { LessonDoneResult, LikeState, VideoDetail } from '@/lib/types';
 
 /** Share of the video that has to be watched before "erledigt" (the same rule as on the server). */
@@ -98,6 +99,13 @@ function Lesson({ v, refetch }: { v: VideoDetail; refetch: () => void }) {
         </View>
         {v.description ? <LinkedText text={v.description} muted /> : null}
       </View>
+
+      {v.appHint ? (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.m, padding: space.m, borderRadius: radius.l, backgroundColor: p.accentSoft }}>
+          <Ionicons name="sparkles-outline" size={20} color={p.accent} style={{ marginTop: 2 }} />
+          <Txt style={{ flex: 1 }}>{v.appHint}</Txt>
+        </View>
+      ) : null}
 
       {v.bodyMd ? <LessonText lessonId={v.id} bodyMd={v.bodyMd} embeds={v.embeds} /> : null}
       {v.file ? <DownloadRow file={v.file} onOpened={refetch} /> : null}

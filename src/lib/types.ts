@@ -65,6 +65,8 @@ export interface VideoDetail extends VideoCard {
   description: string; likedByMe: boolean; readyAt: UnixSec; prevId: Id | null; nextId: Id | null; commentsEnabled: boolean;
   categoryVideos: VideoCard[]; bodyMd: string; watchedSec: number; embeds: LessonEmbed[]; sectionTitle: string | null;
   categorySections: SectionRef[]; file: MemberDownload | null; products: ProductRef[];
+  /** The hint of its category for the app (software migration 0122, 11.11.2026; a text without a link); older installations send none. */
+  appHint?: string | null;
 }
 
 export interface MemberProduct {
