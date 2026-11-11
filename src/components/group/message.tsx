@@ -1,6 +1,8 @@
 // One message of the group (owner 10.11.2026): own messages on the right in the community's colour, the others on the left with picture and name; the
 // team's messages carry a badge. An answer quotes what it answers; a picture or GIF of the team fills the bubble; a poll shows its options with bars and
 // takes a tap as the vote; reactions stand below as chips (a tap gives or takes back). A long press opens the menu (components/group/chat.tsx).
+// The result of a poll: a member sees it once they voted; the team always, with the number of votes per answer (owner 11.11.2026: "wo sieht Mailin, wenn
+// Leute abgestimmt haben").
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Pressable, View } from 'react-native';
@@ -25,11 +27,12 @@ function Avatar({ m }: { m: GroupMessage }) {
   );
 }
 
-function PollView({ m, onVote }: { m: GroupMessage; onVote: (options: number[]) => void }) {
+function PollView({ m, onVote, team }: { m: GroupMessage; onVote: (options: number[]) => void; team: boolean }) {
   const p = usePalette();
   const poll = m.poll;
   if (!poll) return null;
-  const voted = poll.mine.length > 0;
+  // the bars: after one's own vote; the team sees them always
+  const voted = poll.mine.length > 0 || team;
   const total = Math.max(1, poll.counts.reduce((a, b) => a + b, 0));
   return (
     <View style={{ gap: space.s, minWidth: 220 }}>
@@ -47,7 +50,7 @@ function PollView({ m, onVote }: { m: GroupMessage; onVote: (options: number[]) 
             key={`${i}-${option}`}
             accessibilityRole={poll.multi ? 'checkbox' : 'radio'}
             accessibilityState={{ checked: mine }}
-            accessibilityLabel={`${option}${voted ? `, ${Math.round(share * 100)} Prozent` : ''}`}
+            accessibilityLabel={`${option}${voted ? `, ${team ? `${poll.counts[i] ?? 0} Stimmen, ` : ''}${Math.round(share * 100)} Prozent` : ''}`}
             onPress={() => onVote(next)}
             style={({ pressed }) => ({ minHeight: 44, borderRadius: radius.m, borderWidth: 1.5, borderColor: mine ? p.accent : p.line, overflow: 'hidden', opacity: pressed ? 0.75 : 1, justifyContent: 'center' })}
           >
@@ -55,18 +58,24 @@ function PollView({ m, onVote }: { m: GroupMessage; onVote: (options: number[]) 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, paddingHorizontal: space.m }}>
               <Ionicons name={mine ? (poll.multi ? 'checkbox' : 'radio-button-on') : (poll.multi ? 'square-outline' : 'radio-button-off')} size={18} color={mine ? p.accent : p.textMuted} />
               <Txt style={{ flex: 1 }}>{option}</Txt>
-              {voted ? <Txt variant="small" muted style={{ fontVariant: ['tabular-nums'] }}>{Math.round(share * 100)} %</Txt> : null}
+              {voted ? (
+                <Txt variant="small" muted style={{ fontVariant: ['tabular-nums'] }}>
+                  {team ? `${poll.counts[i] ?? 0} · ` : ''}{Math.round(share * 100)} %
+                </Txt>
+              ) : null}
             </View>
           </Pressable>
         );
       })}
-      <Txt variant="small" muted>{poll.voters === 1 ? '1 Stimme' : `${poll.voters} Stimmen`}{voted ? ' · Tippe nochmal zum Ändern' : ''}</Txt>
+      <Txt variant="small" muted>
+        {poll.voters === 1 ? '1 Person hat abgestimmt' : `${poll.voters} Personen haben abgestimmt`}{poll.mine.length > 0 ? ' · Tippe nochmal zum Ändern' : ''}
+      </Txt>
     </View>
   );
 }
 
-export function MessageBubble({ m, onLongPress, onReact, onVote, onOpenImage }: {
-  m: GroupMessage; onLongPress: () => void; onReact: (emoji: string) => void; onVote: (options: number[]) => void; onOpenImage: (url: string) => void;
+export function MessageBubble({ m, team = false, onLongPress, onReact, onVote, onOpenImage }: {
+  m: GroupMessage; team?: boolean; onLongPress: () => void; onReact: (emoji: string) => void; onVote: (options: number[]) => void; onOpenImage: (url: string) => void;
 }) {
   const p = usePalette();
   const { api } = useSession();
@@ -119,7 +128,7 @@ export function MessageBubble({ m, onLongPress, onReact, onVote, onOpenImage }: 
               />
             </Pressable>
           ) : null}
-          {m.poll ? <PollView m={m} onVote={onVote} /> : null}
+          {m.poll ? <PollView m={m} onVote={onVote} team={team} /> : null}
           {m.body ? <LinkedText text={m.body} color={fg} style={{ paddingHorizontal: m.image ? space.s : 0, paddingBottom: m.image ? space.xs : 0 }} /> : null}
         </Pressable>
         <View style={{ flexDirection: own ? 'row-reverse' : 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.xs, paddingHorizontal: space.xs }}>

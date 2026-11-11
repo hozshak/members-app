@@ -427,6 +427,7 @@ export function GroupChat({ info }: { info: GroupInfo }) {
           renderItem={({ item }) => (
             <MessageBubble
               m={item}
+              team={info.isTeam}
               onLongPress={() => setSheet(item)}
               onReact={(emoji) => act.react.mutate({ id: item.id, emoji })}
               onVote={(options) => act.vote.mutate({ id: item.id, options }, { onError: (err) => Alert.alert('Stimme nicht gezählt', errorText(err)) })}
