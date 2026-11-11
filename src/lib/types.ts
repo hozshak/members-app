@@ -86,6 +86,8 @@ export interface MemberHome extends MemberLibrary {
   tools?: MemberTool[];
   /** The coach's texts of the app (lib/app-texts.ts); older installations send none. */
   appTexts?: unknown;
+  /** The apps of the community (11.11.2026): links and the version of the Android file (lib/app-update.ts); older installations send none. */
+  app?: { ios: string | null; android: string | null; androidVersionCode?: number | null; androidVersionName?: string | null };
 }
 export interface MemberTool { id: string; title: string; url: string; text: string }
 

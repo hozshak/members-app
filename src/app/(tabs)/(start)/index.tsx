@@ -10,6 +10,7 @@ import { ProgressOverview } from '@/components/home-parts';
 import { IntroStart } from '@/components/intro-card';
 import { RoutineTodayCard } from '@/components/routine-parts';
 import { TourTarget } from '@/components/tour';
+import { UpdateNotice } from '@/components/update-notice';
 import { ErrorView, Loading, Screen, Txt } from '@/components/ui';
 import { greeting, uniqueById } from '@/lib/format';
 import { useHome } from '@/lib/queries';
@@ -51,6 +52,8 @@ export default function HomeScreen() {
         </TourTarget>
       ) : null}
       </View>
+
+      <UpdateNotice />
 
       <TourTarget id="start.intro"><IntroStart products={h.products} /></TourTarget>
 
