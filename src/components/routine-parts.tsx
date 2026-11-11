@@ -325,9 +325,10 @@ export function RoutineTodayCard() {
         <View style={{ flex: 1, gap: 2 }}>
           <Txt variant="caption" color={p.accent}>{done ? 'Heute erledigt' : routine.plan ? planLabel(routine) : 'Deine Routine heute'}</Txt>
           <Txt variant="heading" numberOfLines={2}>{routine.title}</Txt>
+          {/* without the number of exercises (owner 11.11.2026: "2 Übungen nicht schreiben") */}
           <Txt variant="small" muted>
             {state === 'running' ? `Tag ${routine.challenge?.dayNumber} von ${routine.challenge?.days} · ` : ''}
-            {plural(routine.steps.length, 'Übung', 'Übungen')} · {minutes(routineSeconds(routine))}
+            {minutes(routineSeconds(routine))}
             {streak > 0 ? ` · ${plural(streak, 'Tag', 'Tage')} in Folge` : ''}
           </Txt>
         </View>

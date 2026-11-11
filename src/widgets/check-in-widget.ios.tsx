@@ -1,5 +1,5 @@
 // The check-in widget on the iPhone (owner 06.11.2026): when the next check-in comes, and on its day an invitation in the colour of the community; a tap
-// opens the check-in (or the list of check-ins). Small: icon, what is up, a chip. Medium: also a sentence and how many were done. Lock screen: rectangular
+// opens the check-in (or the list of check-ins). On the light pink of all widgets (11.11.2026). Small: icon, what is up, a chip. Medium: also a sentence and how many were done. Lock screen: rectangular
 // and inline. In tinted modes of the home screen the system paints everything in one colour, so nothing there relies on a filled background.
 // Runs in the widget's own runtime, so everything it uses stands inside the function (see the `widget` directive of expo-widgets); it only knows
 // CheckInWidgetProps.
@@ -24,13 +24,15 @@ const CheckInWidget = (props: CheckInWidgetProps, environment: WidgetEnvironment
     week: { kicker: 'Heute', headline: 'Zeit für deinen Check-in', line: 'Zwei Minuten: Fotos vergleichen und kurz in dich hineinhören.', chip: 'Los geht’s', icon: 'list.clipboard.fill' },
     final: { kicker: 'Geschafft', headline: 'Dein Abschluss-Check', line: 'Vergleich deine Fotos und schau, was sich getan hat.', chip: 'Los geht’s', icon: 'rosette' },
   }[props.state];
-  const bg = due ? [props.accent, props.accentDeep] : ['#3A2F28', '#1C1613'];
-  const fg = due ? props.onAccent : white;
-  const chipBg = due ? fg : props.accent;
-  // on its day the chip takes the colour of the text; on a dark chip the accent itself reads better than its deep shade
-  const chipFg = due ? (fg === white ? props.accentDeep : props.accent) : props.onAccent;
+  // the light pink of all widgets (owner 11.11.2026: #FFE2F0) with dark writing; on its day the icon takes the deep accent and the chip turns dark, so the
+  // day stands out without a second background
+  const paper = '#FFE2F0';
+  const fg = tinted ? white : '#3A1F2B';
+  const iconFg = due && !tinted ? props.accentDeep : fg;
+  const chipBg = due ? '#3A1F2B' : props.accent;
+  const chipFg = due ? white : props.onAccent;
   const url = due && props.routineId ? `members://routine/check-in?id=${encodeURIComponent(props.routineId)}` : 'members://routine/check-ins';
-  const root = [containerBackground({ type: 'linearGradient', colors: bg, startPoint: { x: 0, y: 0 }, endPoint: { x: 1, y: 1 } }, 'widget'), widgetURL(url)];
+  const root = [containerBackground(paper, 'widget'), widgetURL(url)];
 
   // ---------- lock screen ----------
   if (family === 'accessoryInline') {
@@ -55,21 +57,21 @@ const CheckInWidget = (props: CheckInWidgetProps, environment: WidgetEnvironment
       <Text modifiers={[font({ size: 13, weight: 'bold', design: 'rounded' }), foregroundStyle(tinted ? white : chipFg), lineLimit(1)]}>{text.chip}</Text>
     </HStack>
   );
-  const kicker = <Text modifiers={[font({ size: 12, weight: 'bold', design: 'rounded' }), foregroundStyle(fg), opacity(0.8), lineLimit(1)]}>{text.kicker.toUpperCase()}</Text>;
+  const kicker = <Text modifiers={[font({ size: 12, weight: 'bold', design: 'rounded' }), foregroundStyle(iconFg), opacity(due ? 1 : 0.7), lineLimit(1)]}>{text.kicker.toUpperCase()}</Text>;
   const headline = (
     <Text modifiers={[font({ size: props.state === 'soon' ? 30 : 19, weight: 'heavy', design: 'rounded' }), foregroundStyle(fg), minimumScaleFactor(0.6), lineLimit(props.state === 'soon' ? 1 : 3)]}>
       {text.headline}
     </Text>
   );
   // the big icon in the corner, cut off by the edge
-  const backIcon = <Image systemName={text.icon as 'calendar'} size={110} color={fg} modifiers={[opacity(0.12), offset({ x: 30, y: 30 })]} />;
+  const backIcon = <Image systemName={text.icon as 'calendar'} size={110} color={iconFg} modifiers={[opacity(0.1), offset({ x: 30, y: 30 })]} />;
 
   if (family === 'systemSmall') {
     return (
       <ZStack alignment="bottomTrailing" modifiers={root}>
         {backIcon}
         <VStack alignment="leading" spacing={4}>
-          <Image systemName={text.icon as 'calendar'} size={24} color={fg} />
+          <Image systemName={text.icon as 'calendar'} size={24} color={iconFg} />
           {kicker}
           {headline}
           <Spacer />
@@ -88,11 +90,11 @@ const CheckInWidget = (props: CheckInWidgetProps, environment: WidgetEnvironment
       <HStack spacing={14}>
         <VStack alignment="leading" spacing={4}>
           <HStack spacing={6}>
-            <Image systemName={text.icon as 'calendar'} size={20} color={fg} />
+            <Image systemName={text.icon as 'calendar'} size={20} color={iconFg} />
             {kicker}
           </HStack>
           {headline}
-          <Text modifiers={[font({ size: 13, weight: 'medium' }), foregroundStyle(fg), opacity(0.85), lineLimit(2)]}>{text.line}</Text>
+          <Text modifiers={[font({ size: 13, weight: 'medium' }), foregroundStyle(fg), opacity(0.75), lineLimit(2)]}>{text.line}</Text>
           <Spacer />
           {chip}
         </VStack>

@@ -1,8 +1,8 @@
-// The home screen widget on the iPhone, a tap opens the Routine tab. Like Duolingo's it has a mood, the whole surface shows
-// how today stands: an unlit flame on dark while today is open, red with the hours left when the streak is in danger in the
-// evening, a burning orange when today is done. Small: flame, streak, what to do. Medium: also the routine and this week as a
-// row of little flames. Lock screen: the streak (circular, rectangular, inline). In tinted modes of the home screen the system
-// paints everything in one colour, so nothing there relies on a filled background.
+// The home screen widget on the iPhone, a tap opens the Routine tab. Like Duolingo's it has a mood: an unlit flame while today
+// is open, red with the hours left when the streak is in danger in the evening, a burning orange when today is done — on the
+// light pink of all widgets (owner 11.11.2026: #FFE2F0) with dark writing. Small: flame, streak, what to do. Medium: also the
+// routine and this week as a row of little flames. Lock screen: the streak (circular, rectangular, inline). In tinted modes of
+// the home screen the system paints everything in one colour, so nothing there relies on a filled background.
 // Runs in the widget's own runtime, so everything it uses stands inside the function (see the `widget` directive of
 // expo-widgets); it never sees the app's state, only RoutineWidgetProps.
 import { AccessoryWidgetBackground, HStack, Image, Spacer, Text, VStack, ZStack, Circle } from '@expo/ui/swift-ui';
@@ -17,19 +17,22 @@ const RoutineWidget = (props: RoutineWidgetProps, environment: WidgetEnvironment
   const family = environment.widgetFamily;
   const tinted = environment.widgetRenderingMode === 'accented' || environment.widgetRenderingMode === 'vibrant';
   const white = '#FFFFFF';
+  const paper = '#FFE2F0';
+  // dark writing on the pink; tinted modes need it light, the system takes over the colour there
+  const ink = tinted ? white : '#3A1F2B';
   const state = !props.hasRoutine ? 'none' : props.doneToday ? 'done' : props.atRisk ? 'risk' : props.streak > 0 ? 'open' : 'start';
   const look = {
-    none: { bg: ['#3A2F28', '#1C1613'], flame: props.accent, chipBg: props.accent, chipFg: props.onAccent ?? white, headline: 'Deine Routine', icon: 'play.fill' },
-    start: { bg: ['#3A2F28', '#1C1613'], flame: props.accent, chipBg: props.accent, chipFg: props.onAccent ?? white, headline: 'Fang heute an', icon: 'play.fill' },
-    open: { bg: ['#3A2F28', '#1C1613'], flame: '#8F8177', chipBg: props.accent, chipFg: props.onAccent ?? white, headline: 'Heute noch offen', icon: 'play.fill' },
-    risk: { bg: ['#FF6B3D', '#E0241F', '#A80F2C'], flame: white, chipBg: white, chipFg: '#C81E24', headline: 'Serie in Gefahr!', icon: 'hourglass' },
-    done: { bg: ['#FFB81F', '#FF8A00', '#EC5310'], flame: white, chipBg: white, chipFg: '#D9520B', headline: 'Geschafft!', icon: 'checkmark' },
+    none: { flame: props.accent, title: ink, chipBg: props.accent, chipFg: props.onAccent ?? white, headline: 'Deine Routine', icon: 'play.fill' },
+    start: { flame: props.accent, title: ink, chipBg: props.accent, chipFg: props.onAccent ?? white, headline: 'Fang heute an', icon: 'play.fill' },
+    open: { flame: '#D7A9BE', title: ink, chipBg: props.accent, chipFg: props.onAccent ?? white, headline: 'Heute noch offen', icon: 'play.fill' },
+    risk: { flame: '#E0241F', title: tinted ? white : '#C81E24', chipBg: '#E0241F', chipFg: white, headline: 'Serie in Gefahr!', icon: 'hourglass' },
+    done: { flame: '#FF8A00', title: tinted ? white : '#C2410C', chipBg: '#EC5310', chipFg: white, headline: 'Geschafft!', icon: 'checkmark' },
   }[state];
   const chipText = state === 'done' ? 'Bis morgen' : state === 'risk' ? `Noch ${props.hoursLeft} Std.` : state === 'none' ? 'App öffnen' : `${props.minutes} Min.`;
   const big = props.streak > 0 ? String(props.streak) : 'Tag 1';
   const small = props.streak === 1 ? 'Tag in Folge' : props.streak > 1 ? 'Tage in Folge' : 'wartet auf dich';
   const root = [
-    containerBackground({ type: 'linearGradient', colors: look.bg, startPoint: { x: 0, y: 0 }, endPoint: { x: 1, y: 1 } }, 'widget'),
+    containerBackground(paper, 'widget'),
     widgetURL('members://routine'),
   ];
 
@@ -71,13 +74,13 @@ const RoutineWidget = (props: RoutineWidgetProps, environment: WidgetEnvironment
   const streakNumber = (
     <HStack spacing={5}>
       <Image systemName="flame.fill" size={32} color={look.flame} />
-      <Text modifiers={[font({ size: props.streak > 0 ? 44 : 34, weight: 'black', design: 'rounded' }), monospacedDigit(), foregroundStyle(white), minimumScaleFactor(0.5), lineLimit(1)]}>{big}</Text>
+      <Text modifiers={[font({ size: props.streak > 0 ? 44 : 34, weight: 'black', design: 'rounded' }), monospacedDigit(), foregroundStyle(ink), minimumScaleFactor(0.5), lineLimit(1)]}>{big}</Text>
     </HStack>
   );
-  const smallLine = <Text modifiers={[font({ size: 13, weight: 'semibold', design: 'rounded' }), foregroundStyle(white), opacity(0.85), lineLimit(1)]}>{small}</Text>;
+  const smallLine = <Text modifiers={[font({ size: 13, weight: 'semibold', design: 'rounded' }), foregroundStyle(ink), opacity(0.75), lineLimit(1)]}>{small}</Text>;
   // the big flame in the corner, cut off by the edge
   const backFlame = state === 'done' || state === 'risk'
-    ? <Image systemName="flame.fill" size={120} color={white} modifiers={[opacity(0.16), offset({ x: 34, y: 34 })]} />
+    ? <Image systemName="flame.fill" size={120} color={look.flame} modifiers={[opacity(0.16), offset({ x: 34, y: 34 })]} />
     : null;
 
   if (family === 'systemSmall') {
@@ -88,7 +91,7 @@ const RoutineWidget = (props: RoutineWidgetProps, environment: WidgetEnvironment
           {streakNumber}
           {/* evening and done: the message counts more than the words under the number */}
           {state === 'risk' || state === 'done'
-            ? <Text modifiers={[font({ size: 15, weight: 'heavy', design: 'rounded' }), foregroundStyle(white), minimumScaleFactor(0.75), lineLimit(1)]}>{look.headline}</Text>
+            ? <Text modifiers={[font({ size: 15, weight: 'heavy', design: 'rounded' }), foregroundStyle(look.title), minimumScaleFactor(0.75), lineLimit(1)]}>{look.headline}</Text>
             : smallLine}
           <Spacer />
           <HStack>
@@ -111,19 +114,20 @@ const RoutineWidget = (props: RoutineWidgetProps, environment: WidgetEnvironment
         </VStack>
         <Spacer />
         <VStack alignment="leading" spacing={0}>
-          <Text modifiers={[font({ size: 18, weight: 'heavy', design: 'rounded' }), foregroundStyle(white), minimumScaleFactor(0.75), lineLimit(1)]}>{look.headline}</Text>
-          <Text modifiers={[font({ size: 13, weight: 'medium' }), foregroundStyle(white), opacity(0.85), lineLimit(1)]}>{props.title}</Text>
+          <Text modifiers={[font({ size: 18, weight: 'heavy', design: 'rounded' }), foregroundStyle(look.title), minimumScaleFactor(0.75), lineLimit(1)]}>{look.headline}</Text>
+          <Text modifiers={[font({ size: 13, weight: 'medium' }), foregroundStyle(ink), opacity(0.75), lineLimit(1)]}>{props.title}</Text>
           <Spacer />
           <HStack spacing={3}>
             {props.week.map((done, i) => (
               <VStack key={i} spacing={3}>
                 <ZStack modifiers={[frame({ width: 24, height: 24 })]}>
-                  {done && !tinted ? <Circle modifiers={[foregroundStyle(white)]} /> : null}
-                  {!done && i !== props.todayIndex ? <Circle modifiers={[foregroundStyle(white), opacity(0.16)]} /> : null}
-                  {done ? <Image systemName="flame.fill" size={14} color={tinted ? white : look.bg[look.bg.length - 1]} /> : null}
-                  {!done && i === props.todayIndex ? <Image systemName="circle" color={white} modifiers={[font({ size: 24, weight: 'semibold' })]} /> : null}
+                  {/* a done day: a white flame on a dot in the colour of today's mood (the accent while today is open) */}
+                  {done && !tinted ? <Circle modifiers={[foregroundStyle(state === 'done' || state === 'risk' ? look.flame : props.accent)]} /> : null}
+                  {!done && i !== props.todayIndex ? <Circle modifiers={[foregroundStyle(ink), opacity(0.08)]} /> : null}
+                  {done ? <Image systemName="flame.fill" size={14} color={white} /> : null}
+                  {!done && i === props.todayIndex ? <Image systemName="circle" color={ink} modifiers={[font({ size: 24, weight: 'semibold' })]} /> : null}
                 </ZStack>
-                <Text modifiers={[font({ size: 10, weight: i === props.todayIndex ? 'heavy' : 'medium', design: 'rounded' }), foregroundStyle(white), opacity(i === props.todayIndex ? 1 : 0.7)]}>{letters[i]}</Text>
+                <Text modifiers={[font({ size: 10, weight: i === props.todayIndex ? 'heavy' : 'medium', design: 'rounded' }), foregroundStyle(ink), opacity(i === props.todayIndex ? 1 : 0.6)]}>{letters[i]}</Text>
               </VStack>
             ))}
           </HStack>
