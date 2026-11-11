@@ -149,3 +149,26 @@ export function flatMessages(data: InfiniteData<GroupPage> | undefined): GroupMe
   }
   return out;
 }
+
+/** The team: reported messages with who reported them and why (software 11.11.2026). */
+export interface GroupReportedMessage { message: GroupMessage; reports: { name: string; reason: string; at: UnixSec }[] }
+/** The team: who voted what. */
+export interface GroupPollVoters { options: { option: string; voters: { id: Id; name: string }[] }[] }
+
+export function useGroupReports(open: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...groupKey, 'reports'] as const,
+    enabled: open,
+    queryFn: async () => (await api.get<{ items: GroupReportedMessage[] }>('/api/member/group/reports')).items,
+  });
+}
+
+export function usePollVoters(messageId: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...groupKey, 'votes', messageId] as const,
+    enabled: !!messageId,
+    queryFn: () => api.get<GroupPollVoters>(`/api/member/group/messages/${messageId}/votes`),
+  });
+}

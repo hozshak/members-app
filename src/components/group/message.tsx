@@ -27,7 +27,7 @@ function Avatar({ m }: { m: GroupMessage }) {
   );
 }
 
-function PollView({ m, onVote, team }: { m: GroupMessage; onVote: (options: number[]) => void; team: boolean }) {
+function PollView({ m, onVote, team, onShowVotes }: { m: GroupMessage; onVote: (options: number[]) => void; team: boolean; onShowVotes?: () => void }) {
   const p = usePalette();
   const poll = m.poll;
   if (!poll) return null;
@@ -70,12 +70,21 @@ function PollView({ m, onVote, team }: { m: GroupMessage; onVote: (options: numb
       <Txt variant="small" muted>
         {poll.voters === 1 ? '1 Person hat abgestimmt' : `${poll.voters} Personen haben abgestimmt`}{poll.mine.length > 0 ? ' · Tippe nochmal zum Ändern' : ''}
       </Txt>
+      {team && onShowVotes ? (
+        <Pressable accessibilityRole="button" onPress={onShowVotes} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 }}>
+          <Ionicons name="people-outline" size={16} color={p.accent} />
+          <Txt variant="small" color={p.accent} style={{ fontWeight: '600' }}>Wer hat was gewählt?</Txt>
+        </Pressable>
+      ) : (
+        <Txt variant="small" muted style={{ fontSize: 11, lineHeight: 15 }}>Das Team sieht, wer wie abgestimmt hat.</Txt>
+      )}
     </View>
   );
 }
 
-export function MessageBubble({ m, team = false, onLongPress, onReact, onVote, onOpenImage }: {
-  m: GroupMessage; team?: boolean; onLongPress: () => void; onReact: (emoji: string) => void; onVote: (options: number[]) => void; onOpenImage: (url: string) => void;
+export function MessageBubble({ m, team = false, highlighted = false, onLongPress, onReact, onVote, onOpenImage, onOpenReply, onShowVotes }: {
+  m: GroupMessage; team?: boolean; highlighted?: boolean; onLongPress: () => void; onReact: (emoji: string) => void; onVote: (options: number[]) => void;
+  onOpenImage: (url: string) => void; onOpenReply?: (id: string) => void; onShowVotes?: () => void;
 }) {
   const p = usePalette();
   const { api } = useSession();
@@ -86,7 +95,7 @@ export function MessageBubble({ m, team = false, onLongPress, onReact, onVote, o
   const fg = filled ? p.onAccent : p.text;
   const imageRatio = m.image && m.image.width > 0 && m.image.height > 0 ? m.image.width / m.image.height : 4 / 3;
   return (
-    <View style={{ flexDirection: own ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: space.s, paddingHorizontal: space.l, paddingVertical: 3 }}>
+    <View style={{ flexDirection: own ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: space.s, paddingHorizontal: space.l, paddingVertical: 3, backgroundColor: highlighted ? p.accentSoft : 'transparent' }}>
       {own ? null : <Avatar m={m} />}
       <View style={{ maxWidth: '82%', gap: 4, alignItems: own ? 'flex-end' : 'flex-start' }}>
         {own ? null : (
@@ -112,10 +121,17 @@ export function MessageBubble({ m, team = false, onLongPress, onReact, onVote, o
           {m.hidden ? <Txt variant="small" color={p.danger} style={{ paddingHorizontal: m.image ? space.s : 0 }}>Ausgeblendet nach Meldungen ({m.reports ?? 0})</Txt> : null}
           {!m.hidden && m.reports ? <Txt variant="small" color={p.danger} style={{ paddingHorizontal: m.image ? space.s : 0 }}>Gemeldet ({m.reports})</Txt> : null}
           {m.replyTo ? (
-            <View style={{ borderLeftWidth: 3, borderLeftColor: own ? p.onAccent : p.accent, paddingLeft: space.s, opacity: 0.85, marginHorizontal: m.image ? space.s : 0 }}>
+            // a tap on the quote goes to the message it answers (owner 11.11.2026)
+            <Pressable
+              accessibilityRole="button"
+              accessibilityHint="Zur beantworteten Nachricht"
+              onPress={() => m.replyTo && onOpenReply?.(m.replyTo.id)}
+              onLongPress={onLongPress}
+              style={{ borderLeftWidth: 3, borderLeftColor: own ? p.onAccent : p.accent, paddingLeft: space.s, opacity: 0.85, marginHorizontal: m.image ? space.s : 0 }}
+            >
               <Txt variant="small" color={fg} style={{ fontWeight: '700' }}>{m.replyTo.authorName}</Txt>
               <Txt variant="small" color={fg} numberOfLines={2}>{m.replyTo.deleted ? 'Nachricht gelöscht' : m.replyTo.kind === 'image' && !m.replyTo.body ? 'Bild' : m.replyTo.body}</Txt>
-            </View>
+            </Pressable>
           ) : null}
           {m.deleted ? <Txt variant="small" muted style={{ fontStyle: 'italic' }}>Nachricht gelöscht</Txt> : null}
           {m.image && api ? (
@@ -128,7 +144,7 @@ export function MessageBubble({ m, team = false, onLongPress, onReact, onVote, o
               />
             </Pressable>
           ) : null}
-          {m.poll ? <PollView m={m} onVote={onVote} team={team} /> : null}
+          {m.poll ? <PollView m={m} onVote={onVote} team={team} onShowVotes={onShowVotes} /> : null}
           {m.body ? <LinkedText text={m.body} color={fg} style={{ paddingHorizontal: m.image ? space.s : 0, paddingBottom: m.image ? space.xs : 0 }} /> : null}
         </Pressable>
         <View style={{ flexDirection: own ? 'row-reverse' : 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.xs, paddingHorizontal: space.xs }}>

@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Txt } from '@/components/ui';
@@ -20,6 +20,7 @@ import { registerGroupPush, setGroupChatOpen } from '@/lib/push';
 import { useSession } from '@/lib/session';
 import { radius, space, usePalette } from '@/lib/theme';
 import { MessageBubble } from './message';
+import { ReportsSheet, VotesSheet } from './team-sheets';
 
 const hoursLabel = (h: number) => (h === 1 ? '1 Stunde' : h === 24 ? '24 Stunden' : '7 Tage');
 
@@ -273,6 +274,34 @@ export function GroupChat({ info }: { info: GroupInfo }) {
   const [pollOpen, setPollOpen] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [votesOf, setVotesOf] = useState<GroupMessage | null>(null);
+
+  // to a message (owner 11.11.2026: the pinned one, the one a quote answers, a reported one): older pages load until it is there, then the list goes to it
+  // and it lights up for a moment
+  const listRef = useRef<FlatList<GroupMessage>>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [wanted, setWanted] = useState<string | null>(null);
+  const jumpTo = useCallback((id: string) => setWanted(id), []);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  useEffect(() => {
+    if (!wanted) return;
+    const index = messages.findIndex((x) => x.id === wanted);
+    const t = setTimeout(() => {
+      if (index >= 0) {
+        listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+        setHighlight(wanted);
+        setWanted(null);
+        setTimeout(() => setHighlight((h) => (h === wanted ? null : h)), 1800);
+      } else if (hasNextPage) {
+        if (!isFetchingNextPage) void fetchNextPage();
+      } else {
+        setWanted(null);
+        Alert.alert('Nicht gefunden', 'Diese Nachricht gibt es nicht mehr.');
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, [wanted, messages, hasNextPage, isFetchingNextPage, fetchNextPage]);
   // the field sits right above the tab bar (the safe area of a tab screen already holds it), and right above the keyboard while that is open
   // (owner 10.11.2026: "hier sehr frei Platz")
   const [keyboard, setKeyboard] = useState(false);
@@ -404,31 +433,53 @@ export function GroupChat({ info }: { info: GroupInfo }) {
             </Pressable>
           ) : null}
           {info.isTeam && info.openReports > 0 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.s, paddingVertical: 4, borderRadius: 999, backgroundColor: p.danger }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${info.openReports} gemeldet – ansehen`}
+              onPress={() => setReportsOpen(true)}
+              hitSlop={6}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.s, minHeight: 32, borderRadius: 999, backgroundColor: p.danger, opacity: pressed ? 0.8 : 1 })}
+            >
               <Ionicons name="flag" size={12} color="#FFFFFF" />
               <Txt variant="small" color="#FFFFFF" style={{ fontWeight: '700' }}>{info.openReports} gemeldet</Txt>
-            </View>
+              <Ionicons name="chevron-forward" size={12} color="#FFFFFF" />
+            </Pressable>
           ) : null}
         </View>
         {info.pinned ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s, padding: space.s, borderRadius: radius.m, backgroundColor: p.accentSoft }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Zur angepinnten Nachricht"
+            onPress={() => info.pinned && jumpTo(info.pinned.id)}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s, padding: space.s, borderRadius: radius.m, backgroundColor: p.accentSoft, opacity: pressed ? 0.8 : 1 })}
+          >
             <Ionicons name="pin" size={16} color={p.accent} />
             <Txt variant="small" numberOfLines={2} style={{ flex: 1 }}>{info.pinned.body || info.pinned.poll?.question || 'Bild'}</Txt>
-          </View>
+            <Ionicons name="chevron-down" size={16} color={p.accent} />
+          </Pressable>
         ) : null}
       </View>
       {q.isPending ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={p.accent} /></View>
       ) : (
         <FlatList
+          ref={listRef}
           data={messages}
           inverted
+          onScrollToIndexFailed={(e) => {
+            // rows of different heights: first near it, then exactly
+            listRef.current?.scrollToOffset({ offset: e.averageItemLength * e.index, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: e.index, viewPosition: 0.5, animated: true }), 250);
+          }}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ paddingVertical: space.m }}
           renderItem={({ item }) => (
             <MessageBubble
               m={item}
               team={info.isTeam}
+              highlighted={highlight === item.id}
+              onOpenReply={jumpTo}
+              onShowVotes={info.isTeam ? () => setVotesOf(item) : undefined}
               onLongPress={() => setSheet(item)}
               onReact={(emoji) => act.react.mutate({ id: item.id, emoji })}
               onVote={(options) => act.vote.mutate({ id: item.id, options }, { onError: (err) => Alert.alert('Stimme nicht gezählt', errorText(err)) })}
@@ -451,6 +502,8 @@ export function GroupChat({ info }: { info: GroupInfo }) {
       {sheet ? <MessageSheet m={sheet} info={info} onClose={() => setSheet(null)} onReply={() => setReplyTo(sheet)} /> : null}
       {pollOpen ? <PollEditor onClose={() => setPollOpen(false)} /> : null}
       {bellOpen ? <NotifySheet mode={notify} onClose={() => setBellOpen(false)} /> : null}
+      {reportsOpen ? <ReportsSheet onClose={() => setReportsOpen(false)} onJump={jumpTo} /> : null}
+      {votesOf?.poll ? <VotesSheet messageId={votesOf.id} question={votesOf.poll.question} onClose={() => setVotesOf(null)} /> : null}
       {viewer && api ? (
         <Modal visible animationType="fade" onRequestClose={() => setViewer(null)} statusBarTranslucent>
           <Pressable accessibilityRole="button" accessibilityLabel="Bild schließen" onPress={() => setViewer(null)} style={{ flex: 1, backgroundColor: '#000' }}>
