@@ -1,7 +1,7 @@
 // The buttons of the member start page, as on the website (Einstellungen → Mitgliederbereich → "Startseite: Buttons" of
-// the software, e.g. "WhatsApp-Gruppe" and "Bewertung abgeben"): in the app small round buttons at the top right, next to the name.
-// WhatsApp in its own green; the rating as a gold star with a soft pulse, it should catch the eye. Plain https links: a chat invitation
-// opens the chat app, everything else the browser. The software only sends enabled buttons the member may see. Here too the popup
+// the software, e.g. "Bewertung abgeben"): in the app small round buttons at the top right, next to the name. The rating as a gold star with a soft
+// pulse, it should catch the eye. Plain https links open the browser. Links to WhatsApp are left out (owner 11.11.2026: "WhatsApp aus den Apps
+// rausnehmen" — the app has its own group). The software only sends enabled buttons the member may see. Here too the popup
 // that asks for a rating after a month (lib/rating.ts).
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
@@ -18,13 +18,14 @@ import { Button, Txt } from './ui';
 const ICONS: Record<HomeButtonIcon, keyof typeof Ionicons.glyphMap> = {
   chat: 'chatbubbles', star: 'star', link: 'open-outline', camera: 'camera', calendar: 'calendar',
 };
-const WHATSAPP = '#25D366';
 const GOLD = '#FFB800';
 const STAR = '#FFFFFF';
 const SIZE = 44;
 
-const isWhatsApp = (b: MemberHomeButton) => b.icon === 'chat' && /^https:\/\/(chat\.whatsapp\.com|wa\.me)\//i.test(b.url);
+const isWhatsApp = (b: MemberHomeButton) => /^https:\/\/(chat\.whatsapp\.com|api\.whatsapp\.com|wa\.me)\//i.test(b.url);
 const isLink = (b: MemberHomeButton) => /^https:\/\//i.test(b.url);
+/** The buttons the app shows: https links, never WhatsApp. */
+export const appHomeButtons = (buttons: MemberHomeButton[] | undefined) => (buttons ?? []).filter((b) => isLink(b) && !isWhatsApp(b));
 const open = (url: string) => void Linking.openURL(url).catch(() => undefined);
 
 /** The rating: a gold circle with a ring that keeps going out from it. */
@@ -61,13 +62,12 @@ function RatingButton({ button }: { button: MemberHomeButton }) {
 
 export function HomeButtons({ buttons }: { buttons: MemberHomeButton[] }) {
   const p = usePalette();
-  const links = buttons.filter(isLink);
+  const links = appHomeButtons(buttons);
   if (links.length === 0) return null;
   return (
     <View style={{ flexDirection: 'row', gap: space.s }}>
       {links.map((b) => {
         if (b.icon === 'star') return <RatingButton key={b.id} button={b} />;
-        const whatsapp = isWhatsApp(b);
         const primary = b.style === 'primary';
         return (
           <Pressable
@@ -77,10 +77,10 @@ export function HomeButtons({ buttons }: { buttons: MemberHomeButton[] }) {
             onPress={() => open(b.url)}
             style={({ pressed }) => ({
               width: SIZE, height: SIZE, borderRadius: SIZE / 2, alignItems: 'center', justifyContent: 'center',
-              backgroundColor: whatsapp ? WHATSAPP : primary ? p.accent : p.surfaceAlt, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.96 : 1 }],
+              backgroundColor: primary ? p.accent : p.surfaceAlt, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.96 : 1 }],
             })}
           >
-            <Ionicons name={whatsapp ? 'logo-whatsapp' : (ICONS[b.icon] ?? 'open-outline')} size={whatsapp ? 25 : 22} color={whatsapp ? '#FFFFFF' : primary ? p.onAccent : p.text} />
+            <Ionicons name={ICONS[b.icon] ?? 'open-outline'} size={22} color={primary ? p.onAccent : p.text} />
           </Pressable>
         );
       })}

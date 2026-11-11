@@ -1,11 +1,11 @@
-// Home: greeting with the buttons of the start page next to it (e.g. "WhatsApp-Gruppe", "Bewertung abgeben"), "So startest du" with the
+// Home: greeting with the buttons of the start page next to it (e.g. "Bewertung abgeben"; never WhatsApp, 11.11.2026), "So startest du" with the
 // introduction of each programme (always there; the quote of the day is gone, owner 06.11.2026), today's routine (one tap to its start) and where the
 // member stands in the programmes and the routine. The contents themselves
 // are under "Inhalte". After a month the popup that asks for a rating; the first time the assistant (lib/tour.ts).
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HomeButtons, RatingPrompt, ToolsButton } from '@/components/home-buttons';
+import { appHomeButtons, HomeButtons, RatingPrompt, ToolsButton } from '@/components/home-buttons';
 import { ProgressOverview } from '@/components/home-parts';
 import { IntroStart } from '@/components/intro-card';
 import { RoutineTodayCard } from '@/components/routine-parts';
@@ -43,7 +43,7 @@ export default function HomeScreen() {
         )}
         <Txt variant="display">{name ? `${greeting()}, ${name}` : greeting()}</Txt>
       </View>
-      {(h.buttons && h.buttons.length > 0) || (h.tools && h.tools.length > 0) ? (
+      {appHomeButtons(h.buttons).length > 0 || (h.tools && h.tools.length > 0) ? (
         <TourTarget id="start.buttons">
           <View style={{ flexDirection: 'row', gap: space.s }}>
             {h.tools && h.tools.length > 0 ? <ToolsButton /> : null}

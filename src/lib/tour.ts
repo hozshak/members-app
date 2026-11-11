@@ -35,7 +35,7 @@ export function tabRoutes(): readonly TabRoute[] {
 const STEPS: Record<TourId, TourStep[]> = {
   start: [
     { title: 'Willkommen bei {name}', text: 'Schön, dass du da bist! Ich zeige dir kurz, was wo ist. Die anderen Bereiche erkläre ich dir, sobald du sie zum ersten Mal öffnest.' },
-    { target: 'start.buttons', title: 'WhatsApp, Tools und Bewertung', text: 'Hier oben kommst du in die WhatsApp-Gruppe und zu deinen Tools. Mit dem goldenen Stern gibst du eine Bewertung ab.' },
+    { target: 'start.buttons', title: 'Tools und Bewertung', text: 'Hier oben kommst du zu deinen Tools und Links. Mit dem goldenen Stern gibst du eine Bewertung ab.' },
     { target: 'start.intro', title: 'So startest du', text: 'Für jedes Programm steht hier, womit du anfängst. Tippe drauf, dann öffnet sich die Einführung.' },
     { target: 'start.routine', title: 'Deine Routine heute', text: 'Ein Fingertipp, und du bist bei deinen Übungen für heute.' },
     { target: 'start.progress', title: 'Dein Fortschritt', text: 'So weit bist du in deinen Programmen und in der Routine. Tippe drauf, und du bist direkt dort.' },

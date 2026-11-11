@@ -51,7 +51,8 @@ function MessageSheet({ m, info, onClose, onReply }: { m: GroupMessage; info: Gr
           ]);
         },
       });
-      rows.push({
+      // blocking: members block members only — never the team, and the team itself mutes or bans instead (owner 11.11.2026)
+      if (!team && !m.author.isTeam) rows.push({
         icon: 'eye-off-outline', label: `${m.author.name} blockieren`, onPress: () => {
           onClose();
           Alert.alert(`${m.author.name} blockieren?`, 'Du siehst dann keine Nachrichten mehr von dieser Person.', [

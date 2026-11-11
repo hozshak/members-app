@@ -75,7 +75,7 @@ export interface MemberProduct {
 }
 export interface MemberProductDetail extends MemberProduct { newItems: VideoCard[] }
 export interface MemberLibrary { products: MemberProduct[]; free: CategoryCard[]; more: CategoryCard[]; teasers: CategoryCard[] }
-/** A button of the member start page (shared/member-buttons.ts of the software), e.g. "WhatsApp-Gruppe". */
+/** A button of the member start page (shared/member-buttons.ts of the software), e.g. "Bewertung abgeben". */
 export type HomeButtonIcon = 'chat' | 'star' | 'link' | 'camera' | 'calendar';
 export interface MemberHomeButton { id: string; label: string; url: string; icon: HomeButtonIcon; style: 'primary' | 'secondary' }
 export interface MemberHome extends MemberLibrary {
