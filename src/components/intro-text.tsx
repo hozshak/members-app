@@ -1,4 +1,5 @@
-// The text of an introduction page (lib/intro-text.ts): paragraphs with their bold labels and the coach's **bold**, tips in a box, the coach's pictures at their place.
+// The text of an introduction page (lib/intro-text.ts): paragraphs with their bold labels and the coach's **bold**, _italic_ and ++underlined++, tips in a
+// box, the coach's pictures at their place.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useState } from 'react';
@@ -15,10 +16,17 @@ function Paragraph({ label, text, muted }: { label: string | null; text: string;
   const spans = useTextSpans();
   return (
     <Txt muted={muted}>
-      {label ? <Text style={{ fontWeight: '700', color: p.text }}>{label}: </Text> : null}
+      {label ? <Text style={{ fontWeight: '700', color: p.text }}>{spans(label, true)}: </Text> : null}
       {spans(text, true)}
     </Txt>
   );
+}
+
+/** The label of a tip ("Tipp für den Alltag"), with the coach's italic or underline (12.11.2026). */
+function TipLabel({ label }: { label: string }) {
+  const p = usePalette();
+  const spans = useTextSpans();
+  return <Txt variant="heading" color={p.accent}>{spans(label, true)}</Txt>;
 }
 
 /** A picture of the coach, in its own proportions (until it is loaded 4:3). */
@@ -56,7 +64,7 @@ export function IntroText({ text, images, muted, style }: { text: string; images
             <View key={i} style={{ flexDirection: 'row', gap: space.m, padding: space.m, borderRadius: radius.l, backgroundColor: p.accentSoft }}>
               <Ionicons name="bulb-outline" size={22} color={p.accent} style={{ marginTop: 1 }} />
               <View style={{ flex: 1, gap: 2 }}>
-                {b.label ? <Txt variant="heading" color={p.accent}>{b.label}</Txt> : null}
+                {b.label ? <TipLabel label={b.label} /> : null}
                 <Paragraph label={null} text={b.text} />
               </View>
             </View>

@@ -3,7 +3,7 @@
 //   "Tipp für den Alltag: …"       a line that starts with "Tipp" stands in a box of its own;
 //   "Woche 1–2: Viele merken …"    a short label before the colon is bold;
 //   anything else                  a paragraph, with its links tappable (lib/links.ts);
-//   "**Wort**"                     bold (the "B" of the dashboard, 10.11.2026) — never across a line, never with a space just inside the stars.
+//   "**Wort**", "_Wort_", "++Wort++"  bold, italic, underlined (the "B", "I", "U" of the dashboard, 10. and 12.11.2026) — introRuns below.
 // The same rules as in the dashboard (shared/programme-intro.ts of the software).
 import type { ProgrammeIntroImage } from './intro';
 
@@ -37,17 +37,41 @@ export function introBlocks(text: string, images: readonly ProgrammeIntroImage[]
   return out;
 }
 
-/** `**Wort**` (shared/programme-intro.ts INTRO_BOLD_RE of the software): the text in runs, bold or not. Stars without a partner stay as they are. */
-const BOLD = /\*\*(\S(?:[^\n]*?\S)?)\*\*/g;
+// The format of the coach (the buttons "B", "I", "U" of the dashboard; shared/programme-intro.ts introRuns of the software, the same rules):
+//   **Wort**   bold         never across a line, never with a space just inside the marks
+//   _Wort_     italic       the same, and only around whole words — an address or a name with "_" in it stays as it is (12.11.2026)
+//   ++Wort++   underlined   like bold (12.11.2026)
+// Marks nest ("**_Wort_**"); a mark inside itself and marks without a partner stay as they are.
+export type IntroMark = 'bold' | 'italic' | 'underline';
+export interface IntroRun { text: string; bold: boolean; italic: boolean; underline: boolean }
 
-export function boldRuns(text: string): { text: string; bold: boolean }[] {
-  const out: { text: string; bold: boolean }[] = [];
-  let last = 0;
-  for (const m of text.matchAll(BOLD)) {
-    if (m.index > last) out.push({ text: text.slice(last, m.index), bold: false });
-    out.push({ text: m[1] ?? '', bold: true });
-    last = m.index + m[0].length;
+const RUN_RES: readonly (readonly [IntroMark, RegExp])[] = [
+  ['bold', /\*\*(\S(?:[^\n]*?\S)?)\*\*/],
+  ['underline', /\+\+(\S(?:[^\n]*?\S)?)\+\+/],
+  // group 1: what stands before the first "_" (kept), group 2: the words
+  ['italic', /(^|[\s([{„“"'‚‘*+])_(\S(?:[^\n]*?\S)?)_(?=$|[\s.,;:!?)\]}“”"'‘’…*+–-])/],
+];
+
+export function introRuns(text: string, style: Omit<IntroRun, 'text'> = { bold: false, italic: false, underline: false }): IntroRun[] {
+  const out: IntroRun[] = [];
+  let rest = text;
+  while (rest) {
+    let best: { mark: IntroMark; at: number; len: number; inner: string } | null = null;
+    for (const [mark, re] of RUN_RES) {
+      if (style[mark]) continue;
+      const m = re.exec(rest);
+      if (!m) continue;
+      const lead = mark === 'italic' ? (m[1] ?? '').length : 0;
+      const at = m.index + lead;
+      if (!best || at < best.at) best = { mark, at, len: m[0].length - lead, inner: (mark === 'italic' ? m[2] : m[1]) ?? '' };
+    }
+    if (!best) {
+      out.push({ text: rest, ...style });
+      break;
+    }
+    if (best.at > 0) out.push({ text: rest.slice(0, best.at), ...style });
+    out.push(...introRuns(best.inner, { ...style, [best.mark]: true }));
+    rest = rest.slice(best.at + best.len);
   }
-  if (last < text.length) out.push({ text: text.slice(last), bold: false });
   return out;
 }
