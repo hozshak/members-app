@@ -29,7 +29,15 @@ function iap(): Iap | null {
 }
 
 export type PlanKind = 'monthly' | 'yearly';
-export interface StorePlan { kind: PlanKind; price: string; amount: number | null; trialDays: number | null; sku: string; offerToken?: string }
+/** `amount` is in the store's `currency` (ISO code, e.g. "EUR", "USD", "CHF"), never assume euros (App Review, 13.11.2026). */
+export interface StorePlan {
+  kind: PlanKind; price: string; amount: number | null; currency: string | null; trialDays: number | null; sku: string; offerToken?: string;
+}
+
+const currencyOf = (...values: unknown[]): string | null => {
+  for (const v of values) if (typeof v === 'string' && /^[A-Z]{3}$/.test(v)) return v;
+  return null;
+};
 
 const GOOGLE_BASE_PLANS: Record<PlanKind, string> = { monthly: 'monat', yearly: 'jahr' };
 
@@ -106,7 +114,7 @@ export function useGroupStore(info: GroupInfo | null | undefined) {
             const free = String(p.introductoryPricePaymentModeIOS ?? '').toLowerCase().includes('free');
             const period = p.introductoryPriceSubscriptionPeriodIOS as string | null | undefined;
             next.push({
-              kind, sku, price: String(p.displayPrice ?? ''), amount: typeof p.price === 'number' ? p.price : null,
+              kind, sku, price: String(p.displayPrice ?? ''), amount: typeof p.price === 'number' ? p.price : null, currency: currencyOf(p.currency),
               trialDays: free ? trialDaysOf(period, Number(p.introductoryPriceNumberOfPeriodsIOS ?? 1)) : null,
             });
           }
@@ -123,6 +131,7 @@ export function useGroupStore(info: GroupInfo | null | undefined) {
             const period = pick.period as { unit?: string; value?: number } | null | undefined;
             next.push({
               kind, sku: googleSku, price: String(plain.displayPrice ?? ''), amount: typeof plain.price === 'number' ? plain.price : null,
+              currency: currencyOf(plain.currency, p?.currency),
               trialDays: trial ? trialDaysOf(period?.unit, period?.value ?? 1) : null, offerToken: String(pick.offerTokenAndroid ?? ''),
             });
           }

@@ -141,6 +141,16 @@ function CommentItem({ comment: c, onReply, onChanged }: { comment: Comment; onR
     }
   };
 
+  // blocking (owner 13.11.2026, App Review 1.2): members block members only; the same list as in the group, so the person disappears from both
+  const block = () => Alert.alert(`${c.author.displayName} blockieren?`, 'Du siehst dann keine Kommentare und Gruppen-Nachrichten mehr von dieser Person.', [
+    { text: 'Abbrechen', style: 'cancel' },
+    {
+      text: 'Blockieren',
+      style: 'destructive',
+      onPress: () => void api.put(`/api/member/comments/blocks/${enc(c.author.id)}`).then(onChanged, (err) => Alert.alert('Nicht blockiert', errorText(err))),
+    },
+  ]);
+
   return (
     <View style={{ gap: space.xs, padding: space.m, borderRadius: radius.l, backgroundColor: c.pinned ? p.accentSoft : p.surface, borderWidth: 1, borderColor: p.line }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>
@@ -164,6 +174,11 @@ function CommentItem({ comment: c, onReply, onChanged }: { comment: Comment; onR
           ) : null}
           {c.canReport ? (
             <Pressable accessibilityRole="button" hitSlop={8} onPress={report}><Txt variant="small" muted>Melden</Txt></Pressable>
+          ) : null}
+          {c.canBlock && c.author.id ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`${c.author.displayName} blockieren`} hitSlop={8} onPress={block}>
+              <Txt variant="small" muted>Blockieren</Txt>
+            </Pressable>
           ) : null}
         </View>
       ) : null}

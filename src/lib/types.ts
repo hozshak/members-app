@@ -110,6 +110,8 @@ export interface Comment {
   id: Id; videoId: Id; parentId: Id | null; author: CommentAuthor; body: string; status: 'visible' | 'pending' | 'hidden' | 'deleted';
   pinned: boolean; createdAt: UnixSec; editedAt: UnixSec | null; likeCount: number; likedByMe: boolean; replyCount: number; replies: Comment[];
   canEdit: boolean; canDelete: boolean; canReport: boolean; canModerate: boolean;
+  /** Block the author (13.11.2026; missing from older servers = no button). */
+  canBlock?: boolean;
 }
 export interface CommentsPage { items: Comment[]; nextCursor: string | null; total: number }
 

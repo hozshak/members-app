@@ -14,11 +14,20 @@ import { radius, space, usePalette } from '@/lib/theme';
 
 const APPLE_EULA = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
-const euro = (n: number) => n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+/** An amount in the store's own currency (App Review 13.11.2026: never "€" next to a price in dollars or francs); null when the store did not say. */
+const money = (n: number, currency: string | null): string | null => {
+  if (!currency) return null;
+  try {
+    return n.toLocaleString('de-DE', { style: 'currency', currency });
+  } catch {
+    return null;
+  }
+};
 
 function PlanCard({ plan, selected, saves, onPress }: { plan: StorePlan; selected: boolean; saves: string | null; onPress: () => void }) {
   const p = usePalette();
   const yearly = plan.kind === 'yearly';
+  const perMonth = yearly && plan.amount ? money(plan.amount / 12, plan.currency) : null;
   return (
     <Pressable
       accessibilityRole="radio"
@@ -37,7 +46,7 @@ function PlanCard({ plan, selected, saves, onPress }: { plan: StorePlan; selecte
       <Txt variant="caption" color={selected ? p.accent : p.textMuted}>{yearly ? 'Jährlich' : 'Monatlich'}</Txt>
       <Txt variant="title">{plan.price}</Txt>
       <Txt variant="small" muted>
-        {yearly ? (plan.amount ? `nur ${euro(plan.amount / 12)} im Monat` : 'im Jahr') : 'im Monat'}
+        {yearly ? (perMonth ? `nur ${perMonth} im Monat` : 'im Jahr') : 'im Monat'}
       </Txt>
     </Pressable>
   );
@@ -52,7 +61,9 @@ export function GroupPaywall({ info }: { info: GroupInfo }) {
   const plan = store.plans.find((x) => x.kind === kind) ?? store.plans[0];
   const monthly = store.plans.find((x) => x.kind === 'monthly');
   const yearly = store.plans.find((x) => x.kind === 'yearly');
-  const saving = monthly?.amount && yearly?.amount ? monthly.amount * 12 - yearly.amount : 0;
+  // the saving only when both prices are in the same currency, and written in that currency
+  const saving = monthly?.amount && yearly?.amount && monthly.currency && monthly.currency === yearly.currency ? monthly.amount * 12 - yearly.amount : 0;
+  const savingText = saving > 0.5 && yearly ? money(saving, yearly.currency) : null;
   const storeName = Platform.OS === 'ios' ? 'Apple-Account' : 'Google-Play-Konto';
   const [restored, setRestored] = useState<boolean | null>(null);
 
@@ -83,7 +94,7 @@ export function GroupPaywall({ info }: { info: GroupInfo }) {
         <View style={{ gap: space.l }}>
           <View style={{ flexDirection: 'row', gap: space.m, paddingTop: space.s }}>
             {monthly ? <PlanCard plan={monthly} selected={plan.kind === 'monthly'} saves={null} onPress={() => setKind('monthly')} /> : null}
-            {yearly ? <PlanCard plan={yearly} selected={plan.kind === 'yearly'} saves={saving > 0.5 ? `Spare ${euro(saving)}` : null} onPress={() => setKind('yearly')} /> : null}
+            {yearly ? <PlanCard plan={yearly} selected={plan.kind === 'yearly'} saves={savingText ? `Spare ${savingText}` : null} onPress={() => setKind('yearly')} /> : null}
           </View>
           <Button
             label={plan.trialDays ? `${plan.trialDays} Tage kostenlos testen` : 'Jetzt dabei sein'}

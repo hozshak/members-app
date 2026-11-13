@@ -56,7 +56,7 @@ function MessageSheet({ m, info, onClose, onReply }: { m: GroupMessage; info: Gr
       if (!team && !m.author.isTeam) rows.push({
         icon: 'eye-off-outline', label: `${m.author.name} blockieren`, onPress: () => {
           onClose();
-          Alert.alert(`${m.author.name} blockieren?`, 'Du siehst dann keine Nachrichten mehr von dieser Person.', [
+          Alert.alert(`${m.author.name} blockieren?`, 'Du siehst dann keine Nachrichten und Kommentare mehr von dieser Person.', [
             { text: 'Abbrechen', style: 'cancel' },
             { text: 'Blockieren', style: 'destructive', onPress: () => void act.block.mutateAsync(m.author.id).catch((err) => Alert.alert('Nicht blockiert', errorText(err))) },
           ]);
